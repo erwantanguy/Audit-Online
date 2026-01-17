@@ -70,6 +70,7 @@ function analyzeHTML($html, $url, $pageType) {
         'media' => analyzeMedia($xpath),
         'content' => analyzeContent($html, $xpath),
         'metadata' => analyzeMetadata($xpath),
+        'jsonld' => extractJSONLD($html),
         'breakdown' => []
     ];
     
@@ -79,6 +80,39 @@ function analyzeHTML($html, $url, $pageType) {
     $audit['recommendations'] = generateRecommendations($audit);
     
     return $audit;
+}
+
+/**
+ * Extraction des scripts JSON-LD
+ */
+function extractJSONLD($html) {
+    $scripts = [];
+    
+    preg_match_all('/<script[^>]*type=["\']application\/ld\+json["\'][^>]*>(.*?)<\/script>/is', 
+                   $html, $jsonldMatches);
+    
+    foreach ($jsonldMatches[1] as $jsonld) {
+        $data = json_decode($jsonld, true);
+        if ($data) {
+            $type = 'Unknown';
+            
+            if (isset($data['@type'])) {
+                $type = $data['@type'];
+            } elseif (isset($data['@graph']) && !empty($data['@graph'])) {
+                $types = array_map(function($item) {
+                    return $item['@type'] ?? 'Unknown';
+                }, $data['@graph']);
+                $type = implode(', ', array_unique($types));
+            }
+            
+            $scripts[] = [
+                'type' => $type,
+                'data' => $data
+            ];
+        }
+    }
+    
+    return $scripts;
 }
 
 /**
@@ -218,11 +252,70 @@ function analyzeMedia($xpath) {
  */
 function analyzeContent($html, $xpath) {
     // FAQ
-    $faqDetails = $xpath->query('//details[summary]');
+    $faqDetails = [];
+    $faqElements = $xpath->query('//details[summary]');
+    
+    foreach ($faqElements as $faq) {
+        $summary = $xpath->query('.//summary', $faq)->item(0);
+        $question = $summary ? trim($summary->textContent) : '';
+        
+        $answer = '';
+        $children = $faq->childNodes;
+        foreach ($children as $child) {
+            if ($child->nodeName !== 'summary' && $child->nodeType === XML_ELEMENT_NODE) {
+                $answer .= trim($child->textContent) . ' ';
+            }
+        }
+        
+        if ($question) {
+            $faqDetails[] = [
+                'question' => $question,
+                'answer' => trim($answer),
+                'hasSchema' => false
+            ];
+        }
+    }
+    
+    // Vérifier si FAQ Schema.org
     $faqJSONLD = preg_match('/"@type"\s*:\s*"FAQPage"/', $html);
+    if ($faqJSONLD) {
+        preg_match_all('/"name"\s*:\s*"([^"]+)".*?"text"\s*:\s*"([^"]+)"/s', $html, $faqSchemaMatches);
+        
+        if (!empty($faqSchemaMatches[1])) {
+            $faqDetails = []; // Remplacer par les FAQ Schema.org
+            for ($i = 0; $i < count($faqSchemaMatches[1]); $i++) {
+                $faqDetails[] = [
+                    'question' => $faqSchemaMatches[1][$i],
+                    'answer' => $faqSchemaMatches[2][$i],
+                    'hasSchema' => true
+                ];
+            }
+        }
+    }
     
     // Citations
+    $quotesDetails = [];
     $blockquotes = $xpath->query('//blockquote');
+    
+    foreach ($blockquotes as $quote) {
+        $text = trim($quote->textContent);
+        $cite = $quote->getAttribute('cite');
+        
+        // Chercher author
+        $citeElement = $xpath->query('.//cite', $quote)->item(0);
+        $author = $citeElement ? trim($citeElement->textContent) : '';
+        
+        if ($text) {
+            $quotesDetails[] = [
+                'text' => $text,
+                'cite' => $cite,
+                'author' => $author,
+                'hasSchema' => false // Pourrait être amélioré pour détecter Schema.org Quotation
+            ];
+        }
+    }
+    
+    $blockquotesCount = $blockquotes->length;
     $cites = $xpath->query('//cite');
     
     // Schema.org
@@ -230,9 +323,11 @@ function analyzeContent($html, $xpath) {
     $hasJSONLD = preg_match('/<script[^>]*type=["\']application\/ld\+json["\']/', $html);
     
     return [
-        'faq' => $faqDetails->length,
+        'faq' => count($faqDetails),
+        'faqDetails' => $faqDetails,
         'hasFAQSchema' => $faqJSONLD ? true : false,
-        'blockquotes' => $blockquotes->length,
+        'blockquotes' => $blockquotesCount,
+        'quotesDetails' => $quotesDetails,
         'cites' => $cites->length,
         'hasSchemaOrg' => $hasSchemaOrg,
         'hasJSONLD' => $hasJSONLD ? true : false
@@ -244,16 +339,25 @@ function analyzeContent($html, $xpath) {
  */
 function analyzeMetadata($xpath) {
     $title = $xpath->query('//title')->item(0);
+    $titleText = $title ? trim($title->textContent) : '';
+    
     $description = $xpath->query('//meta[@name="description"]/@content')->item(0);
+    $descriptionText = $description ? trim($description->value) : '';
+    
     $ogTitle = $xpath->query('//meta[@property="og:title"]/@content')->item(0);
+    $ogTitleText = $ogTitle ? trim($ogTitle->value) : '';
+    
     $ogImage = $xpath->query('//meta[@property="og:image"]/@content')->item(0);
     
     return [
         'hasTitle' => $title ? true : false,
-        'titleLength' => $title ? strlen($title->textContent) : 0,
+        'title' => $titleText,
+        'titleLength' => strlen($titleText),
         'hasDescription' => $description ? true : false,
-        'descriptionLength' => $description ? strlen($description->value) : 0,
-        'hasOG' => ($ogTitle && $ogImage) ? true : false
+        'description' => $descriptionText,
+        'descriptionLength' => strlen($descriptionText),
+        'hasOG' => ($ogTitle && $ogImage) ? true : false,
+        'ogTitle' => $ogTitleText
     ];
 }
 

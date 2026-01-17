@@ -340,18 +340,117 @@
             overflow: hidden;
         }
 
-        .bar-fill {
-            height: 100%;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        .code-block {
+            background: #2d2d2d;
+            color: #f8f8f2;
+            padding: 15px;
             border-radius: 8px;
-            transition: width 1s ease;
-            display: flex;
-            align-items: center;
-            justify-content: flex-end;
-            padding-right: 10px;
-            color: white;
-            font-weight: 600;
+            font-family: 'Courier New', monospace;
             font-size: 12px;
+            overflow-x: auto;
+            margin: 10px 0;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+
+        .code-block pre {
+            margin: 0;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+        }
+
+        .detail-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 15px 0;
+            background: white;
+            border-radius: 8px;
+            overflow: hidden;
+        }
+
+        .detail-table th {
+            background: #667eea;
+            color: white;
+            padding: 12px;
+            text-align: left;
+            font-weight: 600;
+        }
+
+        .detail-table td {
+            padding: 12px;
+            border-bottom: 1px solid #e0e0e0;
+        }
+
+        .detail-table tr:last-child td {
+            border-bottom: none;
+        }
+
+        .detail-table tr:hover {
+            background: #f8f9fa;
+        }
+
+        .badge {
+            display: inline-block;
+            padding: 4px 10px;
+            border-radius: 4px;
+            font-size: 12px;
+            font-weight: 600;
+            margin-right: 5px;
+        }
+
+        .badge-success {
+            background: #d4edda;
+            color: #155724;
+        }
+
+        .badge-warning {
+            background: #fff3cd;
+            color: #856404;
+        }
+
+        .badge-error {
+            background: #f8d7da;
+            color: #721c24;
+        }
+
+        .badge-info {
+            background: #d1ecf1;
+            color: #0c5460;
+        }
+
+        .collapsible {
+            background: #f8f9fa;
+            border: none;
+            padding: 12px 15px;
+            width: 100%;
+            text-align: left;
+            cursor: pointer;
+            border-radius: 8px;
+            margin-bottom: 10px;
+            font-weight: 600;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            transition: background 0.3s;
+        }
+
+        .collapsible:hover {
+            background: #e9ecef;
+        }
+
+        .collapsible.active {
+            background: #667eea;
+            color: white;
+        }
+
+        .collapsible-content {
+            max-height: 0;
+            overflow: hidden;
+            transition: max-height 0.3s ease;
+        }
+
+        .collapsible-content.active {
+            max-height: 2000px;
         }
     </style>
 </head>
@@ -429,8 +528,28 @@
             </div>
 
             <div class="section">
+                <h2>📜 Scripts JSON-LD Schema.org</h2>
+                <div id="jsonldScripts"></div>
+            </div>
+
+            <div class="section">
                 <h2>🎨 Éléments multimédias</h2>
                 <div class="entity-list" id="mediaList"></div>
+            </div>
+
+            <div class="section">
+                <h2>❓ FAQ détectées</h2>
+                <div class="entity-list" id="faqList"></div>
+            </div>
+
+            <div class="section">
+                <h2>💬 Citations détectées</h2>
+                <div class="entity-list" id="quotesList"></div>
+            </div>
+
+            <div class="section">
+                <h2>🏷️ Métadonnées de la page</h2>
+                <div class="entity-list" id="metadataDetails"></div>
             </div>
 
             <div class="recommendations" id="recommendations"></div>
@@ -614,50 +733,176 @@
             
             document.getElementById('scoreBreakdown').innerHTML = breakdownHTML;
             
-            // Entités
+            // Entités détaillées
             let entitiesHTML = '';
-            if (data.entities.organization > 0) {
-                entitiesHTML += `
-                    <div class="entity-item">
-                        <h4>Organization (${data.entities.organization})</h4>
-                        <p>Type: Organization</p>
-                        <p>Détection: JSON-LD Schema.org</p>
-                    </div>
-                `;
-            }
-            if (data.entities.person > 0) {
-                entitiesHTML += `
-                    <div class="entity-item">
-                        <h4>Person (${data.entities.person})</h4>
-                        <p>Type: Person</p>
-                        <p>Relations: ${Math.random() > 0.5 ? 'worksFor détecté' : 'Aucune relation'}</p>
-                    </div>
-                `;
-            }
-            if (!entitiesHTML) {
-                entitiesHTML = '<p style="color: #666;">Aucune entité Schema.org détectée</p>';
+            if (data.entities.details && data.entities.details.length > 0) {
+                entitiesHTML = '<table class="detail-table"><thead><tr><th>Type</th><th>Nom</th><th>Détails</th><th>Format</th></tr></thead><tbody>';
+                
+                data.entities.details.forEach(entity => {
+                    const details = [];
+                    if (entity.url) details.push(`URL: ${entity.url}`);
+                    if (entity.jobTitle) details.push(`Fonction: ${entity.jobTitle}`);
+                    if (entity.worksFor) details.push(`WorksFor: ${entity.worksFor}`);
+                    if (entity.logo) details.push('Logo présent');
+                    
+                    entitiesHTML += `
+                        <tr>
+                            <td><span class="badge badge-info">${entity.type}</span></td>
+                            <td><strong>${entity.name}</strong></td>
+                            <td>${details.join(', ') || 'Aucun détail'}</td>
+                            <td><span class="badge ${entity.hasJSONLD ? 'badge-success' : 'badge-warning'}">${entity.hasJSONLD ? 'JSON-LD' : 'Microdata'}</span></td>
+                        </tr>
+                    `;
+                });
+                
+                entitiesHTML += '</tbody></table>';
+            } else {
+                entitiesHTML = '<p style="color: #666; padding: 20px; text-align: center;">Aucune entité Schema.org détectée</p>';
             }
             document.getElementById('entitiesList').innerHTML = entitiesHTML;
             
-            // Médias
+            // Scripts JSON-LD
+            let jsonldHTML = '';
+            if (data.jsonld && data.jsonld.length > 0) {
+                data.jsonld.forEach((script, index) => {
+                    jsonldHTML += `
+                        <button class="collapsible" onclick="toggleCollapse(this)">
+                            <span>📜 Script JSON-LD #${index + 1} - Type: ${script.type || 'Unknown'}</span>
+                            <span>▼</span>
+                        </button>
+                        <div class="collapsible-content">
+                            <div class="code-block"><pre>${JSON.stringify(script.data, null, 2)}</pre></div>
+                        </div>
+                    `;
+                });
+            } else {
+                jsonldHTML = '<p style="color: #666; padding: 20px; text-align: center;">Aucun script JSON-LD détecté</p>';
+            }
+            document.getElementById('jsonldScripts').innerHTML = jsonldHTML;
+            
+            // Médias détaillés
             const mediaHTML = `
-                <div class="entity-item">
-                    <h4>Images (${data.media.images})</h4>
-                    <p>Avec attribut alt: ${data.media.imagesWithAlt}</p>
-                    <p>Sans alt: ${data.media.images - data.media.imagesWithAlt}</p>
-                </div>
-                ${data.media.videos > 0 ? `
-                <div class="entity-item">
-                    <h4>Vidéos (${data.media.videos})</h4>
-                    <p>Format: ${Math.random() > 0.5 ? 'YouTube embed' : 'Hébergement local'}</p>
-                </div>` : ''}
-                ${data.media.audios > 0 ? `
-                <div class="entity-item">
-                    <h4>Audio (${data.media.audios})</h4>
-                    <p>Format: MP3</p>
-                </div>` : ''}
+                <table class="detail-table">
+                    <thead>
+                        <tr><th>Type</th><th>Quantité</th><th>Détails</th><th>Score</th></tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><strong>Images</strong></td>
+                            <td>${data.media.images}</td>
+                            <td>
+                                <span class="badge badge-success">✓ ${data.media.imagesWithAlt} avec alt</span>
+                                ${data.media.imagesWithoutAlt > 0 ? `<span class="badge badge-error">✗ ${data.media.imagesWithoutAlt} sans alt</span>` : ''}
+                                ${data.media.geoOptimized.images > 0 ? `<br><span class="badge badge-info">🎯 ${data.media.geoOptimized.images} optimisées GEO</span>` : ''}
+                            </td>
+                            <td><span class="badge ${data.media.imagesWithAlt === data.media.images ? 'badge-success' : 'badge-warning'}">${data.media.imagesWithAlt === data.media.images ? '100%' : Math.round((data.media.imagesWithAlt/data.media.images)*100) + '%'}</span></td>
+                        </tr>
+                        <tr>
+                            <td><strong>Vidéos</strong></td>
+                            <td>${data.media.videos}</td>
+                            <td>
+                                ${data.media.videos > 0 ? '<span class="badge badge-success">✓ Détectées</span>' : '<span class="badge badge-warning">Aucune vidéo</span>'}
+                                ${data.media.geoOptimized.videos > 0 ? `<span class="badge badge-info">🎯 ${data.media.geoOptimized.videos} optimisées GEO</span>` : ''}
+                            </td>
+                            <td><span class="badge ${data.media.videos > 0 ? 'badge-success' : 'badge-warning'}">${data.media.videos > 0 ? '+10 pts' : '0 pt'}</span></td>
+                        </tr>
+                        <tr>
+                            <td><strong>Audio</strong></td>
+                            <td>${data.media.audios}</td>
+                            <td>
+                                ${data.media.audios > 0 ? '<span class="badge badge-success">✓ Détectés</span>' : '<span class="badge badge-warning">Aucun audio</span>'}
+                                ${data.media.geoOptimized.audios > 0 ? `<span class="badge badge-info">🎯 ${data.media.geoOptimized.audios} optimisés GEO</span>` : ''}
+                            </td>
+                            <td><span class="badge ${data.media.audios > 0 ? 'badge-success' : 'badge-warning'}">${data.media.audios > 0 ? '+5 pts' : '0 pt'}</span></td>
+                        </tr>
+                    </tbody>
+                </table>
             `;
             document.getElementById('mediaList').innerHTML = mediaHTML;
+            
+            // FAQ détaillées
+            let faqHTML = '';
+            if (data.content.faqDetails && data.content.faqDetails.length > 0) {
+                faqHTML = '<table class="detail-table"><thead><tr><th>Question</th><th>Réponse (extrait)</th><th>Format</th></tr></thead><tbody>';
+                
+                data.content.faqDetails.forEach(faq => {
+                    faqHTML += `
+                        <tr>
+                            <td><strong>${faq.question}</strong></td>
+                            <td>${faq.answer.substring(0, 100)}${faq.answer.length > 100 ? '...' : ''}</td>
+                            <td><span class="badge ${faq.hasSchema ? 'badge-success' : 'badge-warning'}">${faq.hasSchema ? 'Schema.org' : 'HTML'}</span></td>
+                        </tr>
+                    `;
+                });
+                
+                faqHTML += '</tbody></table>';
+                
+                if (data.content.hasFAQSchema) {
+                    faqHTML += '<p style="margin-top: 10px;"><span class="badge badge-success">✓ JSON-LD FAQPage détecté</span> <strong>+10 points GEO</strong></p>';
+                }
+            } else {
+                faqHTML = '<p style="color: #666; padding: 20px; text-align: center;">Aucune FAQ détectée</p>';
+            }
+            document.getElementById('faqList').innerHTML = faqHTML;
+            
+            // Citations détaillées
+            let quotesHTML = '';
+            if (data.content.quotesDetails && data.content.quotesDetails.length > 0) {
+                quotesHTML = '<table class="detail-table"><thead><tr><th>Citation (extrait)</th><th>Source</th><th>Format</th></tr></thead><tbody>';
+                
+                data.content.quotesDetails.forEach(quote => {
+                    quotesHTML += `
+                        <tr>
+                            <td><em>"${quote.text.substring(0, 150)}${quote.text.length > 150 ? '...' : ''}"</em></td>
+                            <td>${quote.cite || quote.author || 'Non spécifiée'}</td>
+                            <td><span class="badge ${quote.hasSchema ? 'badge-success' : 'badge-warning'}">${quote.hasSchema ? 'Schema.org' : 'HTML'}</span></td>
+                        </tr>
+                    `;
+                });
+                
+                quotesHTML += '</tbody></table>';
+            } else {
+                quotesHTML = '<p style="color: #666; padding: 20px; text-align: center;">Aucune citation détectée</p>';
+            }
+            document.getElementById('quotesList').innerHTML = quotesHTML;
+            
+            // Métadonnées détaillées
+            const metadataHTML = `
+                <table class="detail-table">
+                    <thead>
+                        <tr><th>Élément</th><th>Valeur</th><th>Status</th></tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><strong>Title</strong></td>
+                            <td>${data.metadata.title || 'Absent'}</td>
+                            <td>
+                                <span class="badge ${data.metadata.hasTitle ? 'badge-success' : 'badge-error'}">${data.metadata.hasTitle ? '✓ Présent' : '✗ Absent'}</span>
+                                ${data.metadata.titleLength > 0 ? `<span class="badge badge-info">${data.metadata.titleLength} caractères</span>` : ''}
+                            </td>
+                        </tr>
+                        <tr>
+                            <td><strong>Description</strong></td>
+                            <td>${data.metadata.description ? data.metadata.description.substring(0, 100) + '...' : 'Absente'}</td>
+                            <td>
+                                <span class="badge ${data.metadata.hasDescription ? 'badge-success' : 'badge-error'}">${data.metadata.hasDescription ? '✓ Présente' : '✗ Absente'}</span>
+                                ${data.metadata.descriptionLength > 0 ? `<span class="badge badge-info">${data.metadata.descriptionLength} caractères</span>` : ''}
+                            </td>
+                        </tr>
+                        <tr>
+                            <td><strong>Open Graph</strong></td>
+                            <td>${data.metadata.ogTitle || 'Non configuré'}</td>
+                            <td><span class="badge ${data.metadata.hasOG ? 'badge-success' : 'badge-warning'}">${data.metadata.hasOG ? '✓ Configuré' : '⚠ Partiel ou absent'}</span></td>
+                        </tr>
+                        <tr>
+                            <td><strong>Schema.org</strong></td>
+                            <td>${data.content.hasJSONLD ? 'JSON-LD' : data.content.hasSchemaOrg ? 'Microdata' : 'Absent'}</td>
+                            <td><span class="badge ${data.content.hasJSONLD ? 'badge-success' : data.content.hasSchemaOrg ? 'badge-warning' : 'badge-error'}">${data.content.hasJSONLD ? '✓ JSON-LD (optimal)' : data.content.hasSchemaOrg ? '⚠ Microdata' : '✗ Absent'}</span></td>
+                        </tr>
+                    </tbody>
+                </table>
+            `;
+            document.getElementById('metadataDetails').innerHTML = metadataHTML;
             
             // Recommandations
             const recommendations = [];
@@ -673,6 +918,12 @@
                 <ul>${recommendations.map(r => `<li>${r}</li>`).join('')}</ul>
             `;
             document.getElementById('recommendations').innerHTML = recHTML;
+        }
+
+        function toggleCollapse(element) {
+            element.classList.toggle('active');
+            const content = element.nextElementSibling;
+            content.classList.toggle('active');
         }
 
         function exportPDF() {
