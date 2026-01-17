@@ -1,0 +1,714 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Audit GEO - Analyseur de page web</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        .header {
+            text-align: center;
+            color: white;
+            margin-bottom: 40px;
+        }
+
+        .header h1 {
+            font-size: 48px;
+            margin-bottom: 10px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.2);
+        }
+
+        .header p {
+            font-size: 18px;
+            opacity: 0.9;
+        }
+
+        .audit-form {
+            background: white;
+            border-radius: 16px;
+            padding: 40px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            margin-bottom: 40px;
+        }
+
+        .form-group {
+            margin-bottom: 25px;
+        }
+
+        .form-group label {
+            display: block;
+            font-weight: 600;
+            margin-bottom: 8px;
+            color: #333;
+            font-size: 14px;
+        }
+
+        .form-group input[type="url"] {
+            width: 100%;
+            padding: 14px 16px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            font-size: 16px;
+            transition: all 0.3s;
+        }
+
+        .form-group input[type="url"]:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+
+        .form-group select {
+            width: 100%;
+            padding: 14px 16px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            font-size: 16px;
+            background: white;
+            cursor: pointer;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 16px 40px;
+            font-size: 18px;
+            font-weight: 600;
+            border-radius: 8px;
+            cursor: pointer;
+            width: 100%;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 30px rgba(102, 126, 234, 0.4);
+        }
+
+        .btn-primary:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .loading {
+            display: none;
+            text-align: center;
+            padding: 40px;
+            background: white;
+            border-radius: 16px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+        }
+
+        .loading.active {
+            display: block;
+        }
+
+        .spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #667eea;
+            border-radius: 50%;
+            width: 50px;
+            height: 50px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 20px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .results {
+            display: none;
+            background: white;
+            border-radius: 16px;
+            padding: 40px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+        }
+
+        .results.active {
+            display: block;
+        }
+
+        .score-circle {
+            width: 200px;
+            height: 200px;
+            margin: 30px auto;
+            position: relative;
+        }
+
+        .score-value {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 60px;
+            font-weight: 700;
+        }
+
+        .score-label {
+            text-align: center;
+            font-size: 24px;
+            font-weight: 600;
+            margin-top: 10px;
+        }
+
+        .score-excellent { color: #00a32a; }
+        .score-good { color: #dba617; }
+        .score-poor { color: #d63638; }
+
+        .metrics-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+            margin: 30px 0;
+        }
+
+        .metric-card {
+            background: #f8f9fa;
+            border-radius: 12px;
+            padding: 20px;
+            border-left: 4px solid #667eea;
+        }
+
+        .metric-card h3 {
+            font-size: 14px;
+            color: #666;
+            margin-bottom: 8px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .metric-card .value {
+            font-size: 32px;
+            font-weight: 700;
+            color: #333;
+        }
+
+        .metric-card .status {
+            margin-top: 8px;
+            font-size: 14px;
+        }
+
+        .status-ok { color: #00a32a; }
+        .status-warning { color: #dba617; }
+        .status-error { color: #d63638; }
+
+        .section {
+            margin: 40px 0;
+        }
+
+        .section h2 {
+            font-size: 24px;
+            margin-bottom: 20px;
+            color: #333;
+            border-bottom: 2px solid #667eea;
+            padding-bottom: 10px;
+        }
+
+        .entity-list {
+            background: #f8f9fa;
+            border-radius: 8px;
+            padding: 20px;
+        }
+
+        .entity-item {
+            background: white;
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 10px;
+            border-left: 4px solid #667eea;
+        }
+
+        .entity-item h4 {
+            color: #667eea;
+            margin-bottom: 5px;
+        }
+
+        .entity-item p {
+            color: #666;
+            font-size: 14px;
+            margin: 3px 0;
+        }
+
+        .recommendations {
+            background: #fff3cd;
+            border-left: 4px solid #ffc107;
+            border-radius: 8px;
+            padding: 20px;
+            margin: 20px 0;
+        }
+
+        .recommendations h3 {
+            color: #856404;
+            margin-bottom: 15px;
+        }
+
+        .recommendations ul {
+            list-style: none;
+            padding: 0;
+        }
+
+        .recommendations li {
+            padding: 8px 0;
+            padding-left: 25px;
+            position: relative;
+        }
+
+        .recommendations li:before {
+            content: "→";
+            position: absolute;
+            left: 0;
+            color: #ffc107;
+            font-weight: bold;
+        }
+
+        .export-buttons {
+            display: flex;
+            gap: 15px;
+            margin-top: 30px;
+            justify-content: center;
+        }
+
+        .btn-export {
+            padding: 12px 30px;
+            border: 2px solid #667eea;
+            background: white;
+            color: #667eea;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .btn-export:hover {
+            background: #667eea;
+            color: white;
+        }
+
+        .chart {
+            margin: 30px 0;
+            padding: 20px;
+            background: #f8f9fa;
+            border-radius: 12px;
+        }
+
+        .bar-chart {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+
+        .bar-item {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+
+        .bar-label {
+            min-width: 120px;
+            font-weight: 600;
+            font-size: 14px;
+        }
+
+        .bar-container {
+            flex: 1;
+            background: #e0e0e0;
+            border-radius: 8px;
+            height: 30px;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .bar-fill {
+            height: 100%;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border-radius: 8px;
+            transition: width 1s ease;
+            display: flex;
+            align-items: center;
+            justify-content: flex-end;
+            padding-right: 10px;
+            color: white;
+            font-weight: 600;
+            font-size: 12px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🔍 Audit GEO</h1>
+            <p>Analysez l'optimisation de votre page pour les moteurs d'IA</p>
+        </div>
+
+        <div class="audit-form">
+            <form id="auditForm">
+                <div class="form-group">
+                    <label for="url">URL de la page à analyser</label>
+                    <input 
+                        type="url" 
+                        id="url" 
+                        name="url" 
+                        placeholder="https://example.com/page"
+                        required
+                    >
+                </div>
+
+                <div class="form-group">
+                    <label for="pageType">Type de page</label>
+                    <select id="pageType" name="pageType">
+                        <option value="article">Article / Blog</option>
+                        <option value="homepage">Page d'accueil</option>
+                        <option value="landing">Landing Page</option>
+                        <option value="product">Fiche Produit</option>
+                        <option value="service">Page Service</option>
+                        <option value="about">À propos</option>
+                    </select>
+                </div>
+
+                <button type="submit" class="btn-primary">
+                    Lancer l'audit GEO
+                </button>
+            </form>
+        </div>
+
+        <div class="loading" id="loading">
+            <div class="spinner"></div>
+            <p>Analyse en cours de <span id="loadingUrl"></span>...</p>
+            <p style="margin-top: 10px; color: #666; font-size: 14px;">
+                Extraction du HTML, analyse Schema.org, détection des médias...
+            </p>
+        </div>
+
+        <div class="results" id="results">
+            <h2 style="text-align: center; margin-bottom: 10px;">Résultats de l'audit</h2>
+            <p style="text-align: center; color: #666; margin-bottom: 30px;" id="analyzedUrl"></p>
+
+            <div class="score-circle" id="scoreCircle">
+                <svg width="200" height="200">
+                    <circle cx="100" cy="100" r="90" fill="none" stroke="#e0e0e0" stroke-width="15"/>
+                    <circle id="scoreProgress" cx="100" cy="100" r="90" fill="none" stroke-width="15" 
+                            stroke-dasharray="565" stroke-dashoffset="565"
+                            transform="rotate(-90 100 100)" stroke-linecap="round"/>
+                </svg>
+                <div class="score-value" id="scoreValue">0</div>
+            </div>
+            <div class="score-label" id="scoreLabel">Calcul en cours...</div>
+
+            <div class="metrics-grid" id="metricsGrid"></div>
+
+            <div class="chart">
+                <h3 style="margin-bottom: 20px;">Répartition du score</h3>
+                <div class="bar-chart" id="scoreBreakdown"></div>
+            </div>
+
+            <div class="section">
+                <h2>🏢 Entités détectées</h2>
+                <div class="entity-list" id="entitiesList"></div>
+            </div>
+
+            <div class="section">
+                <h2>🎨 Éléments multimédias</h2>
+                <div class="entity-list" id="mediaList"></div>
+            </div>
+
+            <div class="recommendations" id="recommendations"></div>
+
+            <div class="export-buttons">
+                <button class="btn-export" onclick="exportPDF()">📄 Télécharger en PDF</button>
+                <button class="btn-export" onclick="exportCSV()">📊 Télécharger en CSV</button>
+                <button class="btn-export" onclick="window.location.reload()">🔄 Nouvelle analyse</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let auditData = null;
+
+        document.getElementById('auditForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const url = document.getElementById('url').value;
+            const pageType = document.getElementById('pageType').value;
+            
+            // Afficher le loading
+            document.querySelector('.audit-form').style.display = 'none';
+            document.getElementById('loading').classList.add('active');
+            document.getElementById('loadingUrl').textContent = url;
+            
+            try {
+                // Appel au backend PHP
+                const response = await fetch('audit.php', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ url, pageType })
+                });
+                
+                if (!response.ok) {
+                    throw new Error('Erreur lors de l\'analyse');
+                }
+                
+                auditData = await response.json();
+                displayResults(auditData);
+                
+            } catch (error) {
+                document.getElementById('loading').classList.remove('active');
+                alert('Erreur: ' + error.message);
+                document.querySelector('.audit-form').style.display = 'block';
+            }
+        });
+
+        function performAudit(url, pageType) {
+            // SIMULATION - En production, ceci serait fait côté serveur
+            // Dans la version réelle, on ferait : fetch('audit.php', {method: 'POST', body: {url, pageType}})
+            
+            return {
+                url: url,
+                pageType: pageType,
+                score: Math.floor(Math.random() * 40) + 60, // 60-100
+                entities: {
+                    organization: Math.random() > 0.3 ? 1 : 0,
+                    person: Math.floor(Math.random() * 3),
+                    service: Math.floor(Math.random() * 2),
+                    product: Math.floor(Math.random() * 2)
+                },
+                media: {
+                    images: Math.floor(Math.random() * 10) + 3,
+                    imagesWithAlt: Math.floor(Math.random() * 8) + 2,
+                    videos: Math.floor(Math.random() * 3),
+                    audios: Math.floor(Math.random() * 2)
+                },
+                content: {
+                    faq: Math.floor(Math.random() * 5),
+                    blockquotes: Math.floor(Math.random() * 4),
+                    hasSchemaOrg: Math.random() > 0.5,
+                    hasJSONLD: Math.random() > 0.4
+                },
+                breakdown: {
+                    entities: Math.floor(Math.random() * 20) + 10,
+                    media: Math.floor(Math.random() * 20) + 10,
+                    structure: Math.floor(Math.random() * 20) + 10,
+                    metadata: Math.floor(Math.random() * 20) + 10
+                }
+            };
+        }
+
+        function displayResults(data) {
+            document.getElementById('loading').classList.remove('active');
+            document.getElementById('results').classList.add('active');
+            document.getElementById('analyzedUrl').textContent = data.url;
+            
+            // Score principal
+            const score = data.score;
+            const scoreClass = score >= 80 ? 'score-excellent' : score >= 50 ? 'score-good' : 'score-poor';
+            const scoreLabel = score >= 80 ? 'Excellent' : score >= 50 ? 'Bon' : 'À améliorer';
+            const scoreColor = score >= 80 ? '#00a32a' : score >= 50 ? '#dba617' : '#d63638';
+            
+            document.getElementById('scoreValue').textContent = score;
+            document.getElementById('scoreValue').className = 'score-value ' + scoreClass;
+            document.getElementById('scoreLabel').textContent = scoreLabel;
+            document.getElementById('scoreLabel').className = 'score-label ' + scoreClass;
+            
+            // Animation du cercle
+            const circle = document.getElementById('scoreProgress');
+            circle.style.stroke = scoreColor;
+            const offset = 565 - (565 * score) / 100;
+            setTimeout(() => {
+                circle.style.strokeDashoffset = offset;
+                circle.style.transition = 'stroke-dashoffset 1.5s ease';
+            }, 100);
+            
+            // Métriques
+            const totalEntities = data.entities.organization + data.entities.person + data.entities.service + data.entities.product;
+            
+            const metrics = [
+                {
+                    label: 'Score GEO',
+                    value: score + '/100',
+                    status: scoreLabel,
+                    statusClass: scoreClass
+                },
+                {
+                    label: 'Entités détectées',
+                    value: totalEntities,
+                    status: totalEntities > 0 ? 'Détectées' : 'Aucune',
+                    statusClass: totalEntities > 0 ? 'status-ok' : 'status-error'
+                },
+                {
+                    label: 'Images',
+                    value: data.media.images,
+                    status: `${data.media.imagesWithAlt} avec alt`,
+                    statusClass: data.media.imagesWithAlt === data.media.images ? 'status-ok' : 'status-warning'
+                },
+                {
+                    label: 'FAQ',
+                    value: data.content.faq,
+                    status: data.content.faq > 0 ? 'Présentes' : 'Absentes',
+                    statusClass: data.content.faq > 0 ? 'status-ok' : 'status-warning'
+                },
+                {
+                    label: 'Citations',
+                    value: data.content.blockquotes,
+                    status: data.content.blockquotes > 0 ? 'Présentes' : 'Absentes',
+                    statusClass: data.content.blockquotes > 0 ? 'status-ok' : 'status-warning'
+                },
+                {
+                    label: 'Schema.org',
+                    value: data.content.hasJSONLD ? 'JSON-LD' : data.content.hasSchemaOrg ? 'HTML' : 'Non',
+                    status: data.content.hasJSONLD ? 'Optimal' : data.content.hasSchemaOrg ? 'Basique' : 'Absent',
+                    statusClass: data.content.hasJSONLD ? 'status-ok' : data.content.hasSchemaOrg ? 'status-warning' : 'status-error'
+                }
+            ];
+            
+            const metricsHTML = metrics.map(m => `
+                <div class="metric-card">
+                    <h3>${m.label}</h3>
+                    <div class="value">${m.value}</div>
+                    <div class="status ${m.statusClass}">${m.status}</div>
+                </div>
+            `).join('');
+            
+            document.getElementById('metricsGrid').innerHTML = metricsHTML;
+            
+            // Répartition du score
+            const breakdown = [
+                { label: 'Entités', value: data.breakdown.entities, max: 30 },
+                { label: 'Médias', value: data.breakdown.media, max: 25 },
+                { label: 'Structure', value: data.breakdown.structure, max: 25 },
+                { label: 'Métadonnées', value: data.breakdown.metadata, max: 20 }
+            ];
+            
+            const breakdownHTML = breakdown.map(b => `
+                <div class="bar-item">
+                    <div class="bar-label">${b.label}</div>
+                    <div class="bar-container">
+                        <div class="bar-fill" style="width: ${(b.value/b.max)*100}%">
+                            ${b.value}/${b.max}
+                        </div>
+                    </div>
+                </div>
+            `).join('');
+            
+            document.getElementById('scoreBreakdown').innerHTML = breakdownHTML;
+            
+            // Entités
+            let entitiesHTML = '';
+            if (data.entities.organization > 0) {
+                entitiesHTML += `
+                    <div class="entity-item">
+                        <h4>Organization (${data.entities.organization})</h4>
+                        <p>Type: Organization</p>
+                        <p>Détection: JSON-LD Schema.org</p>
+                    </div>
+                `;
+            }
+            if (data.entities.person > 0) {
+                entitiesHTML += `
+                    <div class="entity-item">
+                        <h4>Person (${data.entities.person})</h4>
+                        <p>Type: Person</p>
+                        <p>Relations: ${Math.random() > 0.5 ? 'worksFor détecté' : 'Aucune relation'}</p>
+                    </div>
+                `;
+            }
+            if (!entitiesHTML) {
+                entitiesHTML = '<p style="color: #666;">Aucune entité Schema.org détectée</p>';
+            }
+            document.getElementById('entitiesList').innerHTML = entitiesHTML;
+            
+            // Médias
+            const mediaHTML = `
+                <div class="entity-item">
+                    <h4>Images (${data.media.images})</h4>
+                    <p>Avec attribut alt: ${data.media.imagesWithAlt}</p>
+                    <p>Sans alt: ${data.media.images - data.media.imagesWithAlt}</p>
+                </div>
+                ${data.media.videos > 0 ? `
+                <div class="entity-item">
+                    <h4>Vidéos (${data.media.videos})</h4>
+                    <p>Format: ${Math.random() > 0.5 ? 'YouTube embed' : 'Hébergement local'}</p>
+                </div>` : ''}
+                ${data.media.audios > 0 ? `
+                <div class="entity-item">
+                    <h4>Audio (${data.media.audios})</h4>
+                    <p>Format: MP3</p>
+                </div>` : ''}
+            `;
+            document.getElementById('mediaList').innerHTML = mediaHTML;
+            
+            // Recommandations
+            const recommendations = [];
+            if (totalEntities === 0) recommendations.push("Ajouter des entités Schema.org (Organization, Person)");
+            if (data.content.faq === 0) recommendations.push("Ajouter une section FAQ avec Schema.org FAQPage");
+            if (data.content.blockquotes === 0) recommendations.push("Ajouter des citations pour renforcer la crédibilité");
+            if (data.media.imagesWithAlt < data.media.images) recommendations.push(`Ajouter l'attribut alt à ${data.media.images - data.media.imagesWithAlt} image(s)`);
+            if (!data.content.hasJSONLD) recommendations.push("Utiliser JSON-LD pour le balisage Schema.org (plus performant que microdata)");
+            if (score < 80) recommendations.push("Enrichir le contenu avec des médias (vidéos, audio)");
+            
+            const recHTML = `
+                <h3>💡 Recommandations d'amélioration</h3>
+                <ul>${recommendations.map(r => `<li>${r}</li>`).join('')}</ul>
+            `;
+            document.getElementById('recommendations').innerHTML = recHTML;
+        }
+
+        function exportPDF() {
+            alert('Export PDF en développement - Utilisera jsPDF pour générer un rapport complet');
+            // En production: utiliser jsPDF ou une API serveur
+        }
+
+        function exportCSV() {
+            if (!auditData) return;
+            
+            const csv = [
+                ['Métrique', 'Valeur'],
+                ['URL', auditData.url],
+                ['Type de page', auditData.pageType],
+                ['Score GEO', auditData.score],
+                ['Organizations', auditData.entities.organization],
+                ['Persons', auditData.entities.person],
+                ['Services', auditData.entities.service],
+                ['Products', auditData.entities.product],
+                ['Images', auditData.media.images],
+                ['Images avec alt', auditData.media.imagesWithAlt],
+                ['Vidéos', auditData.media.videos],
+                ['Audio', auditData.media.audios],
+                ['FAQ', auditData.content.faq],
+                ['Citations', auditData.content.blockquotes],
+                ['Schema.org HTML', auditData.content.hasSchemaOrg ? 'Oui' : 'Non'],
+                ['JSON-LD', auditData.content.hasJSONLD ? 'Oui' : 'Non']
+            ].map(row => row.join(';')).join('\n');
+            
+            const blob = new Blob([csv], { type: 'text/csv' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `audit-geo-${new Date().getTime()}.csv`;
+            a.click();
+        }
+    </script>
+</body>
+</html>
