@@ -605,32 +605,16 @@
                     body: JSON.stringify({ url, pageType })
                 });
                 
-                const data = await response.json();
-                
-                if (!response.ok || data.error) {
-                    throw new Error(data.error || 'Erreur inconnue');
+                if (!response.ok) {
+                    throw new Error('Erreur lors de l\'analyse');
                 }
                 
-                auditData = data;
+                auditData = await response.json();
                 displayResults(auditData);
                 
             } catch (error) {
-                console.error('Erreur complète:', error);
                 document.getElementById('loading').classList.remove('active');
-                
-                let errorMessage = 'Une erreur est survenue lors de l\'analyse.';
-                
-                if (error.message.includes('Failed to fetch')) {
-                    errorMessage = 'Impossible de contacter le serveur. Vérifiez que audit.php est accessible.';
-                } else if (error.message.includes('Impossible de récupérer')) {
-                    errorMessage = 'La page cible ne répond pas ou bloque les requêtes. Vérifiez l\'URL.';
-                } else if (error.message.includes('CURL')) {
-                    errorMessage = 'Extension CURL manquante sur le serveur PHP.';
-                } else {
-                    errorMessage = error.message;
-                }
-                
-                alert('❌ Erreur: ' + errorMessage + '\n\nDétails pour le debug:\n- Vérifiez la console du navigateur (F12)\n- Consultez audit_errors.log sur le serveur');
+                alert('Erreur: ' + error.message);
                 document.querySelector('.audit-form').style.display = 'block';
             }
         });

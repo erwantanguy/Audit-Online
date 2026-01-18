@@ -4,6 +4,12 @@
  * Analyse une URL et retourne les données GEO
  */
 
+// Activation des logs d'erreurs pour le debug
+error_reporting(E_ALL);
+ini_set('display_errors', 0); // Ne pas afficher dans la réponse
+ini_set('log_errors', 1);
+ini_set('error_log', __DIR__ . '/audit_errors.log');
+
 header('Content-Type: application/json');
 header('Access-Control-Allow-Origin: *');
 
@@ -14,22 +20,42 @@ $pageType = $input['pageType'] ?? 'article';
 
 if (!$url) {
     http_response_code(400);
-    echo json_encode(['error' => 'URL invalide']);
+    echo json_encode(['error' => 'URL invalide ou manquante']);
     exit;
 }
 
-// Récupération du HTML
-$html = fetchHTML($url);
-if (!$html) {
+// Vérifier que CURL est disponible
+if (!function_exists('curl_init')) {
     http_response_code(500);
-    echo json_encode(['error' => 'Impossible de récupérer la page']);
+    echo json_encode(['error' => 'Extension CURL non disponible sur le serveur']);
     exit;
 }
 
-// Analyse de la page
-$audit = analyzeHTML($html, $url, $pageType);
+try {
+    // Récupération du HTML
+    $html = fetchHTML($url);
+    if (!$html) {
+        http_response_code(500);
+        echo json_encode([
+            'error' => 'Impossible de récupérer la page',
+            'details' => 'La page ne répond pas, est inaccessible, ou bloque les requêtes'
+        ]);
+        exit;
+    }
 
-echo json_encode($audit, JSON_PRETTY_PRINT);
+    // Analyse de la page
+    $audit = analyzeHTML($html, $url, $pageType);
+
+    echo json_encode($audit, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
+    
+} catch (Exception $e) {
+    error_log("Erreur audit GEO: " . $e->getMessage());
+    http_response_code(500);
+    echo json_encode([
+        'error' => 'Erreur lors de l\'analyse',
+        'details' => $e->getMessage()
+    ]);
+}
 
 /**
  * Récupère le HTML d'une URL
@@ -42,15 +68,33 @@ function fetchHTML($url) {
         CURLOPT_FOLLOWLOCATION => true,
         CURLOPT_MAXREDIRS => 5,
         CURLOPT_TIMEOUT => 30,
+        CURLOPT_CONNECTTIMEOUT => 10,
         CURLOPT_SSL_VERIFYPEER => false,
-        CURLOPT_USERAGENT => 'Mozilla/5.0 (compatible; GEO-Audit-Bot/1.0)',
+        CURLOPT_SSL_VERIFYHOST => false,
+        CURLOPT_USERAGENT => 'Mozilla/5.0 (compatible; GEO-Audit-Bot/1.0; +https://ticoet.fr)',
+        CURLOPT_ENCODING => '', // Accept gzip
+        CURLOPT_HTTP_VERSION => CURL_HTTP_VERSION_1_1,
     ]);
     
     $html = curl_exec($ch);
     $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    $error = curl_error($ch);
+    $errorNo = curl_errno($ch);
     curl_close($ch);
     
-    return ($httpCode === 200) ? $html : false;
+    // Log des erreurs CURL
+    if ($errorNo) {
+        error_log("CURL Error ($errorNo): $error pour URL: $url");
+        return false;
+    }
+    
+    // Vérifier le code HTTP
+    if ($httpCode !== 200) {
+        error_log("HTTP Code $httpCode pour URL: $url");
+        return false;
+    }
+    
+    return $html;
 }
 
 /**
