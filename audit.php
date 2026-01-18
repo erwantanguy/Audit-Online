@@ -17,6 +17,7 @@ header('Access-Control-Allow-Origin: *');
 $input = json_decode(file_get_contents('php://input'), true);
 $url = filter_var($input['url'] ?? '', FILTER_VALIDATE_URL);
 $pageType = $input['pageType'] ?? 'article';
+$useProxy = $input['useProxy'] ?? false;
 
 if (!$url) {
     http_response_code(400);
@@ -61,6 +62,82 @@ try {
  * Récupère le HTML d'une URL
  */
 function fetchHTML($url) {
+    // Essayer d'abord avec des headers plus réalistes
+    $html = fetchHTMLWithRealHeaders($url);
+    
+    // Si échec, essayer avec cURL basique
+    if (!$html) {
+        $html = fetchHTMLBasic($url);
+    }
+    
+    return $html;
+}
+
+/**
+ * Fetch avec headers réalistes (simule un vrai navigateur)
+ */
+function fetchHTMLWithRealHeaders($url) {
+    $ch = curl_init();
+    
+    // Headers d'un navigateur Chrome réel
+    $headers = [
+        'Accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
+        'Accept-Language: fr-FR,fr;q=0.9,en-US;q=0.8,en;q=0.7',
+        'Accept-Encoding: gzip, deflate, br',
+        'Cache-Control: max-age=0',
+        'Connection: keep-alive',
+        'Upgrade-Insecure-Requests: 1',
+        'Sec-Fetch-Dest: document',
+        'Sec-Fetch-Mode: navigate',
+        'Sec-Fetch-Site: none',
+        'Sec-Fetch-User: ?1',
+        'sec-ch-ua: "Google Chrome";v="119", "Chromium";v="119", "Not?A_Brand";v="24"',
+        'sec-ch-ua-mobile: ?0',
+        'sec-ch-ua-platform: "Windows"'
+    ];
+    
+    curl_setopt_array($ch, [
+        CURLOPT_URL => $url,
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_FOLLOWLOCATION => true,
+        CURLOPT_MAXREDIRS => 5,
+        CURLOPT_TIMEOUT => 45,
+        CURLOPT_CONNECTTIMEOUT => 15,
+        CURLOPT_SSL_VERIFYPEER => false,
+        CURLOPT_SSL_VERIFYHOST => false,
+        CURLOPT_USERAGENT => 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36',
+        CURLOPT_HTTPHEADER => $headers,
+        CURLOPT_ENCODING => '', // Support gzip/deflate
+        CURLOPT_HTTP_VERSION => CURL_HTTP_VERSION_2_0,
+        CURLOPT_COOKIEFILE => '', // Activer les cookies
+        CURLOPT_REFERER => 'https://www.google.com/', // Simuler un accès depuis Google
+    ]);
+    
+    $html = curl_exec($ch);
+    $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    $error = curl_error($ch);
+    $errorNo = curl_errno($ch);
+    curl_close($ch);
+    
+    // Log des erreurs CURL
+    if ($errorNo) {
+        error_log("CURL Error Real Headers ($errorNo): $error pour URL: $url");
+        return false;
+    }
+    
+    // Accepter les codes 2xx et 3xx
+    if ($httpCode >= 200 && $httpCode < 400) {
+        return $html;
+    }
+    
+    error_log("HTTP Code $httpCode avec Real Headers pour URL: $url");
+    return false;
+}
+
+/**
+ * Fetch basique (fallback)
+ */
+function fetchHTMLBasic($url) {
     $ch = curl_init();
     curl_setopt_array($ch, [
         CURLOPT_URL => $url,
@@ -72,7 +149,7 @@ function fetchHTML($url) {
         CURLOPT_SSL_VERIFYPEER => false,
         CURLOPT_SSL_VERIFYHOST => false,
         CURLOPT_USERAGENT => 'Mozilla/5.0 (compatible; GEO-Audit-Bot/1.0; +https://ticoet.fr)',
-        CURLOPT_ENCODING => '', // Accept gzip
+        CURLOPT_ENCODING => '',
         CURLOPT_HTTP_VERSION => CURL_HTTP_VERSION_1_1,
     ]);
     
@@ -82,15 +159,13 @@ function fetchHTML($url) {
     $errorNo = curl_errno($ch);
     curl_close($ch);
     
-    // Log des erreurs CURL
     if ($errorNo) {
-        error_log("CURL Error ($errorNo): $error pour URL: $url");
+        error_log("CURL Error Basic ($errorNo): $error pour URL: $url");
         return false;
     }
     
-    // Vérifier le code HTTP
     if ($httpCode !== 200) {
-        error_log("HTTP Code $httpCode pour URL: $url");
+        error_log("HTTP Code $httpCode Basic pour URL: $url");
         return false;
     }
     
