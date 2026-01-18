@@ -1157,201 +1157,465 @@
             content.classList.toggle('active');
         }
 
-        function exportPDF() {
-            if (!auditData) {
-                alert('Aucune donnée à exporter');
+        /**
+ * Export PDF corrigé pour GEO Audit Tool
+ * Remplace la fonction exportPDF() dans index.html
+ */
+
+function exportPDF() {
+    if (!auditData) {
+        alert('Aucune donnée à exporter');
+        return;
+    }
+
+    try {
+        // Vérifier que jsPDF est chargé
+        if (typeof window.jspdf === 'undefined') {
+            alert('Erreur: Bibliothèque PDF non chargée');
+            return;
+        }
+
+        const { jsPDF } = window.jspdf;
+        const doc = new jsPDF('p', 'mm', 'a4');
+        
+        const pageWidth = 210;
+        const pageHeight = 297;
+        const margin = 20;
+        const contentWidth = pageWidth - (margin * 2);
+        let y = 20;
+        
+        // Helper: Nouvelle page si nécessaire
+        function checkPageBreak(needed = 20) {
+            if (y + needed > pageHeight - margin) {
+                doc.addPage();
+                y = margin;
+                return true;
+            }
+            return false;
+        }
+        
+        // Helper: Texte multiligne sécurisé
+        function addMultilineText(text, x, yPos, maxWidth, lineHeight = 6) {
+            try {
+                const lines = doc.splitTextToSize(String(text || ''), maxWidth);
+                lines.forEach(line => {
+                    if (yPos + lineHeight > pageHeight - margin) {
+                        doc.addPage();
+                        yPos = margin;
+                    }
+                    doc.text(line, x, yPos);
+                    yPos += lineHeight;
+                });
+                return yPos;
+            } catch (e) {
+                console.error('Erreur addMultilineText:', e);
+                return yPos + lineHeight;
+            }
+        }
+        
+        // ============================================
+        // PAGE 1: EN-TÊTE ET SCORE
+        // ============================================
+        
+        // En-tête
+        doc.setFillColor(102, 126, 234);
+        doc.rect(0, 0, pageWidth, 50, 'F');
+        
+        doc.setTextColor(255, 255, 255);
+        doc.setFontSize(28);
+        doc.setFont('helvetica', 'bold');
+        doc.text('Rapport Audit GEO', margin, 25);
+        
+        // URL (limitée)
+        doc.setFontSize(11);
+        doc.setFont('helvetica', 'normal');
+        const urlText = auditData.url.length > 70 ? auditData.url.substring(0, 67) + '...' : auditData.url;
+        doc.text(urlText, margin, 38);
+        
+        // Date
+        const date = new Date().toLocaleDateString('fr-FR');
+        doc.setFontSize(9);
+        doc.text(`Genere le ${date}`, margin, 45);
+        
+        y = 60;
+        doc.setTextColor(0, 0, 0);
+        
+        // Score principal
+        const score = auditData.score;
+        const scoreText = Number.isInteger(score) ? score.toString() : score.toFixed(2);
+        const scoreLabel = score >= 80 ? 'Excellent' : score >= 50 ? 'Bon' : 'A ameliorer';
+        
+        doc.setFontSize(18);
+        doc.setFont('helvetica', 'bold');
+        doc.text('Score GEO Global', margin, y);
+        
+        y += 15;
+        
+        // Cercle de score simplifié
+        const circleX = pageWidth / 2;
+        const circleY = y + 15;
+        const radius = 20;
+        
+        // Cercle de fond
+        doc.setFillColor(240, 240, 240);
+        doc.circle(circleX, circleY, radius, 'F');
+        
+        // Cercle de progression (arc)
+        if (score >= 80) {
+            doc.setFillColor(40, 163, 42);
+        } else if (score >= 50) {
+            doc.setFillColor(219, 166, 23);
+        } else {
+            doc.setFillColor(214, 54, 56);
+        }
+        doc.circle(circleX, circleY, radius - 3, 'F');
+        
+        // Score au centre
+        doc.setTextColor(255, 255, 255);
+        doc.setFontSize(32);
+        doc.setFont('helvetica', 'bold');
+        doc.text(scoreText, circleX, circleY + 5, { align: 'center' });
+        
+        // Label
+        doc.setFontSize(14);
+        if (score >= 80) {
+            doc.setTextColor(40, 163, 42);
+        } else if (score >= 50) {
+            doc.setTextColor(219, 166, 23);
+        } else {
+            doc.setTextColor(214, 54, 56);
+        }
+        doc.text(scoreLabel, circleX, circleY + radius + 10, { align: 'center' });
+        
+        y = circleY + radius + 20;
+        doc.setTextColor(0, 0, 0);
+        
+        // ============================================
+        // RÉPARTITION DU SCORE
+        // ============================================
+        
+        checkPageBreak(60);
+        
+        doc.setFontSize(16);
+        doc.setFont('helvetica', 'bold');
+        doc.text('Repartition du score', margin, y);
+        y += 10;
+        
+        const breakdown = auditData.breakdown;
+        const breakdownData = [
+            { label: 'Entites', value: breakdown.entities, max: 30 },
+            { label: 'Medias', value: breakdown.media, max: 25 },
+            { label: 'Structure', value: breakdown.structure, max: 25 },
+            { label: 'Metadonnees', value: breakdown.metadata, max: 20 }
+        ];
+        
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(11);
+        
+        breakdownData.forEach(item => {
+            checkPageBreak(15);
+            
+            const displayValue = Number.isInteger(item.value) ? item.value : item.value.toFixed(2);
+            const percentage = (item.value / item.max) * 100;
+            
+            // Label
+            doc.setFont('helvetica', 'bold');
+            doc.text(item.label, margin, y);
+            
+            // Valeur
+            doc.setFont('helvetica', 'normal');
+            doc.text(`${displayValue}/${item.max}`, margin + 45, y);
+            
+            // Barre de progression
+            const barX = margin + 75;
+            const barWidth = contentWidth - 55;
+            const barHeight = 6;
+            const fillWidth = (barWidth * percentage) / 100;
+            
+            // Fond
+            doc.setFillColor(240, 240, 240);
+            doc.rect(barX, y - 4, barWidth, barHeight, 'F');
+            
+            // Remplissage
+            if (fillWidth > 0) {
+                doc.setFillColor(102, 126, 234);
+                doc.rect(barX, y - 4, fillWidth, barHeight, 'F');
+            }
+            
+            y += 12;
+        });
+        
+        y += 10;
+        
+        // ============================================
+        // MÉTRIQUES PRINCIPALES
+        // ============================================
+        
+        checkPageBreak(80);
+        
+        doc.setFontSize(16);
+        doc.setFont('helvetica', 'bold');
+        doc.text('Metriques principales', margin, y);
+        y += 8;
+        
+        const totalEntities = auditData.entities.organization + 
+                             auditData.entities.person + 
+                             auditData.entities.service + 
+                             auditData.entities.product;
+        
+        const metricsData = [
+            ['Entites detectees', totalEntities.toString()],
+            ['  Organizations', auditData.entities.organization.toString()],
+            ['  Persons', auditData.entities.person.toString()],
+            ['  Services', auditData.entities.service.toString()],
+            ['  Products', auditData.entities.product.toString()],
+            ['', ''],
+            ['Images totales', auditData.media.images.toString()],
+            ['  Avec alt', auditData.media.imagesWithAlt.toString()],
+            ['  Sans alt', auditData.media.imagesWithoutAlt.toString()],
+            ['Videos', auditData.media.videos.toString()],
+            ['Audio', auditData.media.audios.toString()],
+            ['', ''],
+            ['FAQ', auditData.content.faq.toString()],
+            ['FAQ Schema.org', auditData.content.hasFAQSchema ? 'Oui' : 'Non'],
+            ['Citations', auditData.content.blockquotes.toString()],
+            ['', ''],
+            ['JSON-LD', auditData.content.hasJSONLD ? 'Oui' : 'Non'],
+            ['Schema.org', auditData.content.hasSchemaOrg ? 'Oui' : 'Non']
+        ];
+        
+        doc.setFontSize(10);
+        doc.setFont('helvetica', 'normal');
+        
+        metricsData.forEach(([label, value]) => {
+            if (label === '') {
+                y += 4;
                 return;
             }
-
-            // Charger jsPDF
-            const { jsPDF } = window.jspdf;
-            const doc = new jsPDF('p', 'mm', 'a4');
             
-            let y = 20;
-            const pageWidth = 210;
-            const margin = 20;
-            const contentWidth = pageWidth - (margin * 2);
+            checkPageBreak(8);
             
-            // En-tête
-            doc.setFillColor(102, 126, 234);
-            doc.rect(0, 0, pageWidth, 40, 'F');
+            doc.setFont('helvetica', label.startsWith('  ') ? 'normal' : 'bold');
+            doc.text(label, margin + 2, y);
             
-            doc.setTextColor(255, 255, 255);
-            doc.setFontSize(24);
-            doc.setFont('helvetica', 'bold');
-            doc.text('🔍 Rapport Audit GEO', margin, 25);
-            
-            doc.setFontSize(12);
             doc.setFont('helvetica', 'normal');
-            doc.text(auditData.url, margin, 35);
+            doc.text(value, margin + 90, y);
             
-            y = 50;
-            doc.setTextColor(0, 0, 0);
-            
-            // Score principal
-            doc.setFontSize(16);
-            doc.setFont('helvetica', 'bold');
-            doc.text('Score GEO Global', margin, y);
-            
-            y += 10;
-            const score = auditData.score;
-            const scoreColor = score >= 80 ? [0, 163, 42] : score >= 50 ? [219, 166, 23] : [214, 54, 56];
-            
-            doc.setFillColor(...scoreColor);
-            doc.circle(margin + 20, y + 10, 15, 'F');
-            
-            doc.setTextColor(255, 255, 255);
-            doc.setFontSize(28);
-            doc.setFont('helvetica', 'bold');
-            const scoreText = Number.isInteger(score) ? score.toString() : score.toFixed(2);
-            doc.text(scoreText, margin + 20, y + 14, { align: 'center' });
-            
-            doc.setTextColor(0, 0, 0);
-            doc.setFontSize(12);
-            doc.setFont('helvetica', 'normal');
-            const label = score >= 80 ? 'Excellent' : score >= 50 ? 'Bon' : 'À améliorer';
-            doc.text(label, margin + 45, y + 12);
-            
-            y += 35;
-            
-            // Ligne de séparation
-            doc.setDrawColor(200, 200, 200);
-            doc.line(margin, y, pageWidth - margin, y);
-            y += 10;
-            
-            // Répartition du score
-            doc.setFontSize(14);
-            doc.setFont('helvetica', 'bold');
-            doc.text('Répartition du score', margin, y);
-            y += 10;
-            
-            doc.setFontSize(10);
-            doc.setFont('helvetica', 'normal');
-            
-            const breakdown = auditData.breakdown;
-            const breakdownData = [
-                { label: 'Entités', value: breakdown.entities, max: 30 },
-                { label: 'Médias', value: breakdown.media, max: 25 },
-                { label: 'Structure', value: breakdown.structure, max: 25 },
-                { label: 'Métadonnées', value: breakdown.metadata, max: 20 }
-            ];
-            
-            breakdownData.forEach(item => {
-                const displayValue = Number.isInteger(item.value) ? item.value : item.value.toFixed(2);
+            y += 6;
+        });
+        
+        // ============================================
+        // PAGE 2: ENTITÉS
+        // ============================================
+        
+        doc.addPage();
+        y = margin;
+        
+        doc.setFontSize(18);
+        doc.setFont('helvetica', 'bold');
+        doc.setTextColor(102, 126, 234);
+        doc.text('Details des entites', margin, y);
+        y += 10;
+        
+        doc.setTextColor(0, 0, 0);
+        doc.setFontSize(10);
+        
+        if (auditData.entities.details && auditData.entities.details.length > 0) {
+            auditData.entities.details.forEach((entity, index) => {
+                checkPageBreak(20);
                 
+                // Type
                 doc.setFont('helvetica', 'bold');
-                doc.text(item.label, margin, y);
+                doc.text(`${index + 1}. ${entity.type}`, margin, y);
                 
+                // Format
+                const format = entity.hasJSONLD ? 'JSON-LD' : 'Microdata';
+                doc.setFontSize(8);
                 doc.setFont('helvetica', 'normal');
-                doc.text(`${displayValue}/${item.max}`, margin + 40, y);
+                doc.text(`[${format}]`, margin + 60, y);
                 
-                // Barre de progression
-                const barWidth = contentWidth - 60;
-                const fillWidth = (item.value / item.max) * barWidth;
-                
-                doc.setFillColor(230, 230, 230);
-                doc.rect(margin + 60, y - 3, barWidth, 5, 'F');
-                
-                doc.setFillColor(102, 126, 234);
-                doc.rect(margin + 60, y - 3, fillWidth, 5, 'F');
-                
-                y += 8;
-            });
-            
-            y += 5;
-            doc.line(margin, y, pageWidth - margin, y);
-            y += 10;
-            
-            // Métriques détaillées
-            doc.setFontSize(14);
-            doc.setFont('helvetica', 'bold');
-            doc.text('Métriques détaillées', margin, y);
-            y += 8;
-            
-            doc.setFontSize(10);
-            doc.setFont('helvetica', 'normal');
-            
-            const metrics = [
-                ['Entités détectées', `${auditData.entities.organization + auditData.entities.person + auditData.entities.service + auditData.entities.product}`],
-                ['- Organizations', auditData.entities.organization.toString()],
-                ['- Persons', auditData.entities.person.toString()],
-                ['- Services', auditData.entities.service.toString()],
-                ['- Products', auditData.entities.product.toString()],
-                ['', ''],
-                ['Images', auditData.media.images.toString()],
-                ['- Avec alt', auditData.media.imagesWithAlt.toString()],
-                ['- Sans alt', auditData.media.imagesWithoutAlt.toString()],
-                ['Vidéos', auditData.media.videos.toString()],
-                ['Audio', auditData.media.audios.toString()],
-                ['', ''],
-                ['FAQ', auditData.content.faq.toString()],
-                ['Citations', auditData.content.blockquotes.toString()],
-                ['JSON-LD', auditData.content.hasJSONLD ? 'Oui' : 'Non'],
-                ['Schema.org', auditData.content.hasSchemaOrg ? 'Oui' : 'Non']
-            ];
-            
-            metrics.forEach(([label, value]) => {
-                if (label === '') {
-                    y += 3;
-                    return;
-                }
-                
-                doc.text(label, margin + 2, y);
-                doc.text(value, margin + 80, y);
+                doc.setFontSize(10);
                 y += 6;
                 
-                if (y > 270) {
-                    doc.addPage();
-                    y = 20;
+                // Nom
+                doc.text(`  Nom: ${entity.name || 'Non specifie'}`, margin, y);
+                y += 5;
+                
+                // Détails
+                if (entity.url) {
+                    const urlShort = entity.url.length > 60 ? entity.url.substring(0, 57) + '...' : entity.url;
+                    doc.setFontSize(9);
+                    doc.setTextColor(100, 100, 100);
+                    doc.text(`  URL: ${urlShort}`, margin, y);
+                    doc.setTextColor(0, 0, 0);
+                    doc.setFontSize(10);
+                    y += 5;
                 }
+                
+                if (entity.jobTitle) {
+                    doc.text(`  Fonction: ${entity.jobTitle}`, margin, y);
+                    y += 5;
+                }
+                
+                y += 3;
             });
-            
-            // Nouvelle page pour recommandations
-            doc.addPage();
-            y = 20;
-            
-            doc.setFontSize(14);
-            doc.setFont('helvetica', 'bold');
-            doc.text('💡 Recommandations', margin, y);
-            y += 10;
-            
-            doc.setFontSize(10);
-            doc.setFont('helvetica', 'normal');
-            
-            if (auditData.recommendations && auditData.recommendations.length > 0) {
-                auditData.recommendations.forEach((rec, index) => {
-                    const text = `${index + 1}. ${rec.message || rec}`;
-                    const lines = doc.splitTextToSize(text, contentWidth);
-                    
-                    lines.forEach(line => {
-                        if (y > 280) {
-                            doc.addPage();
-                            y = 20;
-                        }
-                        doc.text(line, margin, y);
-                        y += 6;
-                    });
-                    
-                    y += 2;
-                });
-            } else {
-                doc.text('Aucune recommandation. Votre page est bien optimisée !', margin, y);
-            }
-            
-            // Pied de page sur chaque page
-            const pageCount = doc.internal.getNumberOfPages();
-            for (let i = 1; i <= pageCount; i++) {
-                doc.setPage(i);
-                doc.setFontSize(8);
-                doc.setTextColor(150, 150, 150);
-                doc.text(`Page ${i} sur ${pageCount}`, pageWidth / 2, 290, { align: 'center' });
-                doc.text(`Généré le ${new Date().toLocaleDateString('fr-FR')} - GEO Audit Tool`, margin, 290);
-            }
-            
-            // Télécharger
-            const filename = `audit-geo-${auditData.score}-${Date.now()}.pdf`;
-            doc.save(filename);
+        } else {
+            doc.setTextColor(150, 150, 150);
+            doc.text('Aucune entite detectee', margin, y);
+            doc.setTextColor(0, 0, 0);
         }
+        
+        // ============================================
+        // MÉTADONNÉES
+        // ============================================
+        
+        y += 10;
+        checkPageBreak(50);
+        
+        doc.setFontSize(18);
+        doc.setFont('helvetica', 'bold');
+        doc.setTextColor(102, 126, 234);
+        doc.text('Metadonnees', margin, y);
+        y += 10;
+        
+        doc.setTextColor(0, 0, 0);
+        doc.setFontSize(10);
+        
+        // Title
+        doc.setFont('helvetica', 'bold');
+        doc.text('Title:', margin, y);
+        doc.setFont('helvetica', 'normal');
+        const titleStatus = auditData.metadata.hasTitle ? '[OK]' : '[MANQUANT]';
+        doc.setTextColor(auditData.metadata.hasTitle ? 40 : 214, auditData.metadata.hasTitle ? 163 : 54, auditData.metadata.hasTitle ? 42 : 56);
+        doc.text(titleStatus, margin + 15, y);
+        doc.setTextColor(0, 0, 0);
+        y += 5;
+        
+        if (auditData.metadata.title) {
+            y = addMultilineText(auditData.metadata.title, margin + 2, y, contentWidth - 2, 5);
+            doc.setFontSize(8);
+            doc.setTextColor(150, 150, 150);
+            doc.text(`${auditData.metadata.titleLength} caracteres`, margin + 2, y);
+            y += 5;
+            doc.setFontSize(10);
+            doc.setTextColor(0, 0, 0);
+        }
+        y += 5;
+        
+        // Description
+        checkPageBreak(15);
+        doc.setFont('helvetica', 'bold');
+        doc.text('Description:', margin, y);
+        doc.setFont('helvetica', 'normal');
+        const descStatus = auditData.metadata.hasDescription ? '[OK]' : '[MANQUANT]';
+        doc.setTextColor(auditData.metadata.hasDescription ? 40 : 214, auditData.metadata.hasDescription ? 163 : 54, auditData.metadata.hasDescription ? 42 : 56);
+        doc.text(descStatus, margin + 30, y);
+        doc.setTextColor(0, 0, 0);
+        y += 5;
+        
+        if (auditData.metadata.description) {
+            y = addMultilineText(auditData.metadata.description, margin + 2, y, contentWidth - 2, 5);
+            doc.setFontSize(8);
+            doc.setTextColor(150, 150, 150);
+            doc.text(`${auditData.metadata.descriptionLength} caracteres`, margin + 2, y);
+            y += 5;
+            doc.setFontSize(10);
+            doc.setTextColor(0, 0, 0);
+        }
+        y += 5;
+        
+        // Open Graph
+        checkPageBreak(10);
+        doc.setFont('helvetica', 'bold');
+        doc.text('Open Graph:', margin, y);
+        doc.setFont('helvetica', 'normal');
+        const ogStatus = auditData.metadata.hasOG ? '[OK]' : '[ABSENT]';
+        doc.setTextColor(auditData.metadata.hasOG ? 40 : 214, auditData.metadata.hasOG ? 163 : 54, auditData.metadata.hasOG ? 42 : 56);
+        doc.text(ogStatus, margin + 30, y);
+        doc.setTextColor(0, 0, 0);
+        
+        // ============================================
+        // PAGE 3: RECOMMANDATIONS
+        // ============================================
+        
+        doc.addPage();
+        y = margin;
+        
+        doc.setFontSize(18);
+        doc.setFont('helvetica', 'bold');
+        doc.setTextColor(102, 126, 234);
+        doc.text('Recommandations', margin, y);
+        y += 10;
+        
+        doc.setTextColor(0, 0, 0);
+        doc.setFontSize(10);
+        
+        if (auditData.recommendations && auditData.recommendations.length > 0) {
+            auditData.recommendations.forEach((rec, index) => {
+                checkPageBreak(15);
+                
+                const message = rec.message || rec;
+                const priority = rec.priority || 'medium';
+                
+                // Numéro
+                doc.setFont('helvetica', 'bold');
+                doc.text(`${index + 1}.`, margin, y);
+                
+                // Priorité
+                let priorityText = '';
+                if (priority === 'high') {
+                    doc.setTextColor(214, 54, 56);
+                    priorityText = '[HAUTE]';
+                } else if (priority === 'medium') {
+                    doc.setTextColor(219, 166, 23);
+                    priorityText = '[MOYENNE]';
+                } else {
+                    doc.setTextColor(150, 150, 150);
+                    priorityText = '[INFO]';
+                }
+                doc.text(priorityText, margin + 8, y);
+                doc.setTextColor(0, 0, 0);
+                y += 5;
+                
+                // Message
+                doc.setFont('helvetica', 'normal');
+                y = addMultilineText(message, margin + 5, y, contentWidth - 5, 5);
+                y += 5;
+            });
+        } else {
+            doc.setTextColor(40, 163, 42);
+            doc.text('Votre page est bien optimisee !', margin, y);
+            doc.setTextColor(0, 0, 0);
+        }
+        
+        // ============================================
+        // PIED DE PAGE
+        // ============================================
+        
+        const pageCount = doc.internal.getNumberOfPages();
+        
+        for (let i = 1; i <= pageCount; i++) {
+            doc.setPage(i);
+            
+            doc.setDrawColor(200, 200, 200);
+            doc.line(margin, pageHeight - 15, pageWidth - margin, pageHeight - 15);
+            
+            doc.setFontSize(8);
+            doc.setTextColor(150, 150, 150);
+            doc.text(`Page ${i}/${pageCount}`, pageWidth / 2, pageHeight - 10, { align: 'center' });
+            doc.text(`GEO Audit - ${date}`, margin, pageHeight - 10);
+            doc.text('ticoet.fr', pageWidth - margin, pageHeight - 10, { align: 'right' });
+        }
+        
+        // Téléchargement
+        const filename = `audit-geo-${scoreText}-${Date.now()}.pdf`;
+        doc.save(filename);
+        
+    } catch (error) {
+        console.error('Erreur export PDF:', error);
+        alert('Erreur lors de la génération du PDF: ' + error.message);
+    }
+}
 
         function exportCSV() {
             if (!auditData) {
