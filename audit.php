@@ -15,35 +15,61 @@ header('Access-Control-Allow-Origin: *');
 
 // Récupération de l'URL à analyser
 $input = json_decode(file_get_contents('php://input'), true);
-$url = filter_var($input['url'] ?? '', FILTER_VALIDATE_URL);
+$mode = $input['mode'] ?? 'url';
 $pageType = $input['pageType'] ?? 'article';
-$useProxy = $input['useProxy'] ?? false;
 
-if (!$url) {
-    http_response_code(400);
-    echo json_encode(['error' => 'URL invalide ou manquante']);
-    exit;
-}
-
-// Vérifier que CURL est disponible
-if (!function_exists('curl_init')) {
-    http_response_code(500);
-    echo json_encode(['error' => 'Extension CURL non disponible sur le serveur']);
-    exit;
-}
-
-try {
-    // Récupération du HTML
-    $html = fetchHTML($url);
-    if (!$html) {
+if ($mode === 'html') {
+    // Mode HTML copié-collé
+    $html = $input['html'] ?? '';
+    $url = $input['url'] ?? 'HTML copié-collé';
+    
+    if (empty($html) || strlen($html) < 100) {
+        http_response_code(400);
+        echo json_encode(['error' => 'HTML invalide ou trop court']);
+        exit;
+    }
+    
+} else {
+    // Mode URL classique
+    $url = filter_var($input['url'] ?? '', FILTER_VALIDATE_URL);
+    $useProxy = $input['useProxy'] ?? false;
+    
+    if (!$url) {
+        http_response_code(400);
+        echo json_encode(['error' => 'URL invalide ou manquante']);
+        exit;
+    }
+    
+    // Vérifier que CURL est disponible
+    if (!function_exists('curl_init')) {
+        http_response_code(500);
+        echo json_encode(['error' => 'Extension CURL non disponible sur le serveur']);
+        exit;
+    }
+    
+    try {
+        // Récupération du HTML
+        $html = fetchHTML($url);
+        if (!$html) {
+            http_response_code(500);
+            echo json_encode([
+                'error' => 'Impossible de récupérer la page',
+                'details' => 'La page ne répond pas, est inaccessible, ou bloque les requêtes. Essayez le mode "Analyser du HTML".'
+            ]);
+            exit;
+        }
+    } catch (Exception $e) {
+        error_log("Erreur fetch: " . $e->getMessage());
         http_response_code(500);
         echo json_encode([
-            'error' => 'Impossible de récupérer la page',
-            'details' => 'La page ne répond pas, est inaccessible, ou bloque les requêtes'
+            'error' => 'Erreur lors de la récupération',
+            'details' => $e->getMessage()
         ]);
         exit;
     }
+}
 
+try {
     // Analyse de la page
     $audit = analyzeHTML($html, $url, $pageType);
 

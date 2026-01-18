@@ -466,6 +466,41 @@
             font-weight: 600;
             font-size: 12px;
         }
+
+        .tab-button {
+            padding: 12px 30px;
+            border: 2px solid #e0e0e0;
+            background: white;
+            color: #666;
+            border-radius: 8px 8px 0 0;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+            margin: 0 5px;
+        }
+
+        .tab-button.active {
+            background: white;
+            color: #667eea;
+            border-color: #667eea;
+            border-bottom-color: white;
+            position: relative;
+            z-index: 1;
+        }
+
+        .tab-button:hover:not(.active) {
+            background: #f8f9fa;
+            border-color: #667eea;
+        }
+
+        .tab-content {
+            display: none;
+        }
+
+        .tab-content.active {
+            display: block;
+        }
     </style>
     <link rel="shortcut icon" href="https://wiki.ticoet.me/lib/tpl/dokuwiki/images/favicon.ico" />
     <link rel="apple-touch-icon" href="https://wiki.ticoet.me/lib/tpl/dokuwiki/images/apple-touch-icon.png" />
@@ -481,38 +516,108 @@
         </div>
 
         <div class="audit-form">
+            <div style="text-align: center; margin-bottom: 30px;">
+                <button type="button" class="tab-button active" onclick="switchTab('url')">
+                    🔗 Analyser une URL
+                </button>
+                <button type="button" class="tab-button" onclick="switchTab('html')">
+                    📝 Analyser du HTML
+                </button>
+            </div>
+
             <form id="auditForm">
-                <div class="form-group">
-                    <label for="url">URL de la page à analyser</label>
-                    <input 
-                        type="url" 
-                        id="url" 
-                        name="url" 
-                        placeholder="https://example.com/page"
-                        required
-                    >
+                <div id="urlTab" class="tab-content active">
+                    <div class="form-group">
+                        <label for="url">URL de la page à analyser</label>
+                        <input 
+                            type="url" 
+                            id="url" 
+                            name="url" 
+                            placeholder="https://example.com/page"
+                        >
+                    </div>
+
+                    <div class="form-group">
+                        <label for="pageType">Type de page</label>
+                        <select id="pageType" name="pageType">
+                            <option value="article">Article / Blog</option>
+                            <option value="homepage">Page d'accueil</option>
+                            <option value="landing">Landing Page</option>
+                            <option value="product">Fiche Produit</option>
+                            <option value="service">Page Service</option>
+                            <option value="about">À propos</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label style="display: flex; align-items: center; gap: 10px; cursor: pointer;">
+                            <input type="checkbox" id="useProxy" name="useProxy">
+                            <span>Utiliser un mode compatible pour sites protégés (Cloudflare, etc.)</span>
+                        </label>
+                        <p style="font-size: 12px; color: #666; margin: 5px 0 0 30px;">
+                            Recommandé si la page refuse les connexions
+                        </p>
+                    </div>
                 </div>
 
-                <div class="form-group">
-                    <label for="pageType">Type de page</label>
-                    <select id="pageType" name="pageType">
-                        <option value="article">Article / Blog</option>
-                        <option value="homepage">Page d'accueil</option>
-                        <option value="landing">Landing Page</option>
-                        <option value="product">Fiche Produit</option>
-                        <option value="service">Page Service</option>
-                        <option value="about">À propos</option>
-                    </select>
-                </div>
+                <div id="htmlTab" class="tab-content">
+                    <div style="background: #e7f3ff; padding: 15px; border-radius: 8px; margin-bottom: 20px; border-left: 4px solid #2196f3;">
+                        <h3 style="margin: 0 0 10px; color: #0c5460; font-size: 16px;">📚 Comment récupérer le code HTML ?</h3>
+                        <ol style="margin: 0; padding-left: 20px; font-size: 14px; line-height: 1.8;">
+                            <li><strong>Ouvrez la page</strong> dans votre navigateur (Firefox, Chrome, Safari...)</li>
+                            <li><strong>Affichez le code source</strong> :
+                                <ul style="margin: 5px 0; padding-left: 20px;">
+                                    <li>Windows/Linux : <code style="background: white; padding: 2px 6px; border-radius: 3px;">Ctrl + U</code></li>
+                                    <li>Mac : <code style="background: white; padding: 2px 6px; border-radius: 3px;">Cmd + Option + U</code></li>
+                                    <li>Ou clic droit → "Afficher le code source de la page"</li>
+                                </ul>
+                            </li>
+                            <li><strong>Sélectionnez tout</strong> (<code style="background: white; padding: 2px 6px; border-radius: 3px;">Ctrl+A</code> / <code style="background: white; padding: 2px 6px; border-radius: 3px;">Cmd+A</code>)</li>
+                            <li><strong>Copiez</strong> (<code style="background: white; padding: 2px 6px; border-radius: 3px;">Ctrl+C</code> / <code style="background: white; padding: 2px 6px; border-radius: 3px;">Cmd+C</code>)</li>
+                            <li><strong>Collez</strong> dans le champ ci-dessous (<code style="background: white; padding: 2px 6px; border-radius: 3px;">Ctrl+V</code> / <code style="background: white; padding: 2px 6px; border-radius: 3px;">Cmd+V</code>)</li>
+                        </ol>
+                    </div>
 
-                <div class="form-group">
-                    <label style="display: flex; align-items: center; gap: 10px; cursor: pointer;">
-                        <input type="checkbox" id="useProxy" name="useProxy">
-                        <span>Utiliser un mode compatible pour sites protégés (Cloudflare, etc.)</span>
-                    </label>
-                    <p style="font-size: 12px; color: #666; margin: 5px 0 0 30px;">
-                        Recommandé si la page refuse les connexions
-                    </p>
+                    <div class="form-group">
+                        <label for="htmlInput">Code HTML de la page</label>
+                        <textarea 
+                            id="htmlInput" 
+                            name="htmlInput" 
+                            placeholder="Collez le code source HTML complet ici..."
+                            style="min-height: 300px; font-family: monospace; font-size: 12px;"
+                        ></textarea>
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 8px;">
+                            <p style="font-size: 12px; color: #666; margin: 0;">
+                                💡 <strong>Astuce :</strong> Fonctionne même avec les sites protégés (Cloudflare, etc.)
+                            </p>
+                            <span id="htmlLength" style="font-size: 12px; color: #999;">0 caractères</span>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="htmlUrl">URL de la page (optionnel)</label>
+                        <input 
+                            type="url" 
+                            id="htmlUrl" 
+                            name="htmlUrl" 
+                            placeholder="https://example.com/page (pour le rapport uniquement)"
+                        >
+                        <p style="font-size: 12px; color: #666; margin-top: 5px;">
+                            L'URL n'est utilisée que pour l'affichage dans le rapport
+                        </p>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="htmlPageType">Type de page</label>
+                        <select id="htmlPageType" name="htmlPageType">
+                            <option value="article">Article / Blog</option>
+                            <option value="homepage">Page d'accueil</option>
+                            <option value="landing">Landing Page</option>
+                            <option value="product">Fiche Produit</option>
+                            <option value="service">Page Service</option>
+                            <option value="about">À propos</option>
+                        </select>
+                    </div>
                 </div>
 
                 <button type="submit" class="btn-primary">
@@ -593,18 +698,83 @@
 
     <script>
         let auditData = null;
+        let currentTab = 'url';
+
+        // Compteur de caractères HTML
+        document.getElementById('htmlInput').addEventListener('input', function() {
+            const length = this.value.length;
+            document.getElementById('htmlLength').textContent = length.toLocaleString() + ' caractères';
+            
+            if (length > 0 && length < 100) {
+                document.getElementById('htmlLength').style.color = '#d63638';
+            } else if (length >= 100) {
+                document.getElementById('htmlLength').style.color = '#00a32a';
+            } else {
+                document.getElementById('htmlLength').style.color = '#999';
+            }
+        });
+
+        function switchTab(tab) {
+            currentTab = tab;
+            
+            // Mettre à jour les boutons
+            document.querySelectorAll('.tab-button').forEach(btn => {
+                btn.classList.remove('active');
+            });
+            event.target.classList.add('active');
+            
+            // Mettre à jour les contenus
+            document.querySelectorAll('.tab-content').forEach(content => {
+                content.classList.remove('active');
+            });
+            
+            if (tab === 'url') {
+                document.getElementById('urlTab').classList.add('active');
+            } else {
+                document.getElementById('htmlTab').classList.add('active');
+            }
+        }
 
         document.getElementById('auditForm').addEventListener('submit', async (e) => {
             e.preventDefault();
             
-            const url = document.getElementById('url').value;
-            const pageType = document.getElementById('pageType').value;
-            const useProxy = document.getElementById('useProxy').checked;
+            let requestData = {};
+            
+            if (currentTab === 'url') {
+                const url = document.getElementById('url').value;
+                const pageType = document.getElementById('pageType').value;
+                const useProxy = document.getElementById('useProxy').checked;
+                
+                if (!url) {
+                    alert('⚠️ Veuillez saisir une URL');
+                    return;
+                }
+                
+                requestData = { url, pageType, useProxy, mode: 'url' };
+                document.getElementById('loadingUrl').textContent = url;
+                
+            } else {
+                const htmlInput = document.getElementById('htmlInput').value;
+                const htmlUrl = document.getElementById('htmlUrl').value || 'HTML copié-collé';
+                const htmlPageType = document.getElementById('htmlPageType').value;
+                
+                if (!htmlInput || htmlInput.trim().length < 100) {
+                    alert('⚠️ Veuillez coller le code HTML de la page (minimum 100 caractères)');
+                    return;
+                }
+                
+                requestData = { 
+                    html: htmlInput, 
+                    url: htmlUrl, 
+                    pageType: htmlPageType, 
+                    mode: 'html' 
+                };
+                document.getElementById('loadingUrl').textContent = htmlUrl;
+            }
             
             // Afficher le loading
             document.querySelector('.audit-form').style.display = 'none';
             document.getElementById('loading').classList.add('active');
-            document.getElementById('loadingUrl').textContent = url;
             
             try {
                 // Appel au backend PHP
@@ -613,7 +783,7 @@
                     headers: {
                         'Content-Type': 'application/json'
                     },
-                    body: JSON.stringify({ url, pageType, useProxy })
+                    body: JSON.stringify(requestData)
                 });
                 
                 const data = await response.json();
