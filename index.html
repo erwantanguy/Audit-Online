@@ -696,6 +696,10 @@
         </div>
     </div>
 
+    <!-- Bibliothèque jsPDF pour export PDF -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+
     <script>
         let auditData = null;
         let currentTab = 'url';
@@ -862,7 +866,10 @@
             const scoreLabel = score >= 80 ? 'Excellent' : score >= 50 ? 'Bon' : 'À améliorer';
             const scoreColor = score >= 80 ? '#00a32a' : score >= 50 ? '#dba617' : '#d63638';
             
-            document.getElementById('scoreValue').textContent = score;
+            // Afficher le score avec 2 décimales si nécessaire
+            const scoreDisplay = Number.isInteger(score) ? score : score.toFixed(2);
+            
+            document.getElementById('scoreValue').textContent = scoreDisplay;
             document.getElementById('scoreValue').className = 'score-value ' + scoreClass;
             document.getElementById('scoreLabel').textContent = scoreLabel;
             document.getElementById('scoreLabel').className = 'score-label ' + scoreClass;
@@ -882,7 +889,7 @@
             const metrics = [
                 {
                     label: 'Score GEO',
-                    value: score + '/100',
+                    value: (Number.isInteger(score) ? score : score.toFixed(2)) + '/100',
                     status: scoreLabel,
                     statusClass: scoreClass
                 },
@@ -936,16 +943,20 @@
                 { label: 'Métadonnées', value: data.breakdown.metadata, max: 20 }
             ];
             
-            const breakdownHTML = breakdown.map(b => `
+            const breakdownHTML = breakdown.map(b => {
+                const percentage = ((b.value / b.max) * 100).toFixed(2);
+                const displayValue = Number.isInteger(b.value) ? b.value : b.value.toFixed(2);
+                
+                return `
                 <div class="bar-item">
                     <div class="bar-label">${b.label}</div>
                     <div class="bar-container">
-                        <div class="bar-fill" style="width: ${(b.value/b.max)*100}%">
-                            ${b.value}/${b.max}
+                        <div class="bar-fill" style="width: ${percentage}%">
+                            ${displayValue}/${b.max}
                         </div>
                     </div>
                 </div>
-            `).join('');
+            `}).join('');
             
             document.getElementById('scoreBreakdown').innerHTML = breakdownHTML;
             
@@ -1143,38 +1154,276 @@
         }
 
         function exportPDF() {
-            alert('Export PDF en développement - Utilisera jsPDF pour générer un rapport complet');
-            // En production: utiliser jsPDF ou une API serveur
+            if (!auditData) {
+                alert('Aucune donnée à exporter');
+                return;
+            }
+
+            // Charger jsPDF
+            const { jsPDF } = window.jspdf;
+            const doc = new jsPDF('p', 'mm', 'a4');
+            
+            let y = 20;
+            const pageWidth = 210;
+            const margin = 20;
+            const contentWidth = pageWidth - (margin * 2);
+            
+            // En-tête
+            doc.setFillColor(102, 126, 234);
+            doc.rect(0, 0, pageWidth, 40, 'F');
+            
+            doc.setTextColor(255, 255, 255);
+            doc.setFontSize(24);
+            doc.setFont('helvetica', 'bold');
+            doc.text('🔍 Rapport Audit GEO', margin, 25);
+            
+            doc.setFontSize(12);
+            doc.setFont('helvetica', 'normal');
+            doc.text(auditData.url, margin, 35);
+            
+            y = 50;
+            doc.setTextColor(0, 0, 0);
+            
+            // Score principal
+            doc.setFontSize(16);
+            doc.setFont('helvetica', 'bold');
+            doc.text('Score GEO Global', margin, y);
+            
+            y += 10;
+            const score = auditData.score;
+            const scoreColor = score >= 80 ? [0, 163, 42] : score >= 50 ? [219, 166, 23] : [214, 54, 56];
+            
+            doc.setFillColor(...scoreColor);
+            doc.circle(margin + 20, y + 10, 15, 'F');
+            
+            doc.setTextColor(255, 255, 255);
+            doc.setFontSize(28);
+            doc.setFont('helvetica', 'bold');
+            const scoreText = Number.isInteger(score) ? score.toString() : score.toFixed(2);
+            doc.text(scoreText, margin + 20, y + 14, { align: 'center' });
+            
+            doc.setTextColor(0, 0, 0);
+            doc.setFontSize(12);
+            doc.setFont('helvetica', 'normal');
+            const label = score >= 80 ? 'Excellent' : score >= 50 ? 'Bon' : 'À améliorer';
+            doc.text(label, margin + 45, y + 12);
+            
+            y += 35;
+            
+            // Ligne de séparation
+            doc.setDrawColor(200, 200, 200);
+            doc.line(margin, y, pageWidth - margin, y);
+            y += 10;
+            
+            // Répartition du score
+            doc.setFontSize(14);
+            doc.setFont('helvetica', 'bold');
+            doc.text('Répartition du score', margin, y);
+            y += 10;
+            
+            doc.setFontSize(10);
+            doc.setFont('helvetica', 'normal');
+            
+            const breakdown = auditData.breakdown;
+            const breakdownData = [
+                { label: 'Entités', value: breakdown.entities, max: 30 },
+                { label: 'Médias', value: breakdown.media, max: 25 },
+                { label: 'Structure', value: breakdown.structure, max: 25 },
+                { label: 'Métadonnées', value: breakdown.metadata, max: 20 }
+            ];
+            
+            breakdownData.forEach(item => {
+                const displayValue = Number.isInteger(item.value) ? item.value : item.value.toFixed(2);
+                
+                doc.setFont('helvetica', 'bold');
+                doc.text(item.label, margin, y);
+                
+                doc.setFont('helvetica', 'normal');
+                doc.text(`${displayValue}/${item.max}`, margin + 40, y);
+                
+                // Barre de progression
+                const barWidth = contentWidth - 60;
+                const fillWidth = (item.value / item.max) * barWidth;
+                
+                doc.setFillColor(230, 230, 230);
+                doc.rect(margin + 60, y - 3, barWidth, 5, 'F');
+                
+                doc.setFillColor(102, 126, 234);
+                doc.rect(margin + 60, y - 3, fillWidth, 5, 'F');
+                
+                y += 8;
+            });
+            
+            y += 5;
+            doc.line(margin, y, pageWidth - margin, y);
+            y += 10;
+            
+            // Métriques détaillées
+            doc.setFontSize(14);
+            doc.setFont('helvetica', 'bold');
+            doc.text('Métriques détaillées', margin, y);
+            y += 8;
+            
+            doc.setFontSize(10);
+            doc.setFont('helvetica', 'normal');
+            
+            const metrics = [
+                ['Entités détectées', `${auditData.entities.organization + auditData.entities.person + auditData.entities.service + auditData.entities.product}`],
+                ['- Organizations', auditData.entities.organization.toString()],
+                ['- Persons', auditData.entities.person.toString()],
+                ['- Services', auditData.entities.service.toString()],
+                ['- Products', auditData.entities.product.toString()],
+                ['', ''],
+                ['Images', auditData.media.images.toString()],
+                ['- Avec alt', auditData.media.imagesWithAlt.toString()],
+                ['- Sans alt', auditData.media.imagesWithoutAlt.toString()],
+                ['Vidéos', auditData.media.videos.toString()],
+                ['Audio', auditData.media.audios.toString()],
+                ['', ''],
+                ['FAQ', auditData.content.faq.toString()],
+                ['Citations', auditData.content.blockquotes.toString()],
+                ['JSON-LD', auditData.content.hasJSONLD ? 'Oui' : 'Non'],
+                ['Schema.org', auditData.content.hasSchemaOrg ? 'Oui' : 'Non']
+            ];
+            
+            metrics.forEach(([label, value]) => {
+                if (label === '') {
+                    y += 3;
+                    return;
+                }
+                
+                doc.text(label, margin + 2, y);
+                doc.text(value, margin + 80, y);
+                y += 6;
+                
+                if (y > 270) {
+                    doc.addPage();
+                    y = 20;
+                }
+            });
+            
+            // Nouvelle page pour recommandations
+            doc.addPage();
+            y = 20;
+            
+            doc.setFontSize(14);
+            doc.setFont('helvetica', 'bold');
+            doc.text('💡 Recommandations', margin, y);
+            y += 10;
+            
+            doc.setFontSize(10);
+            doc.setFont('helvetica', 'normal');
+            
+            if (auditData.recommendations && auditData.recommendations.length > 0) {
+                auditData.recommendations.forEach((rec, index) => {
+                    const text = `${index + 1}. ${rec.message || rec}`;
+                    const lines = doc.splitTextToSize(text, contentWidth);
+                    
+                    lines.forEach(line => {
+                        if (y > 280) {
+                            doc.addPage();
+                            y = 20;
+                        }
+                        doc.text(line, margin, y);
+                        y += 6;
+                    });
+                    
+                    y += 2;
+                });
+            } else {
+                doc.text('Aucune recommandation. Votre page est bien optimisée !', margin, y);
+            }
+            
+            // Pied de page sur chaque page
+            const pageCount = doc.internal.getNumberOfPages();
+            for (let i = 1; i <= pageCount; i++) {
+                doc.setPage(i);
+                doc.setFontSize(8);
+                doc.setTextColor(150, 150, 150);
+                doc.text(`Page ${i} sur ${pageCount}`, pageWidth / 2, 290, { align: 'center' });
+                doc.text(`Généré le ${new Date().toLocaleDateString('fr-FR')} - GEO Audit Tool`, margin, 290);
+            }
+            
+            // Télécharger
+            const filename = `audit-geo-${auditData.score}-${Date.now()}.pdf`;
+            doc.save(filename);
         }
 
         function exportCSV() {
-            if (!auditData) return;
+            if (!auditData) {
+                alert('Aucune donnée à exporter');
+                return;
+            }
             
             const csv = [
                 ['Métrique', 'Valeur'],
                 ['URL', auditData.url],
                 ['Type de page', auditData.pageType],
-                ['Score GEO', auditData.score],
+                ['Date audit', auditData.timestamp || new Date().toLocaleString('fr-FR')],
+                [''],
+                ['SCORE GLOBAL', auditData.score],
+                [''],
+                ['RÉPARTITION DU SCORE'],
+                ['Entités', `${auditData.breakdown.entities}/30`],
+                ['Médias', `${auditData.breakdown.media}/25`],
+                ['Structure', `${auditData.breakdown.structure}/25`],
+                ['Métadonnées', `${auditData.breakdown.metadata}/20`],
+                [''],
+                ['ENTITÉS'],
                 ['Organizations', auditData.entities.organization],
                 ['Persons', auditData.entities.person],
                 ['Services', auditData.entities.service],
                 ['Products', auditData.entities.product],
-                ['Images', auditData.media.images],
+                ['LocalBusiness', auditData.entities.localBusiness || 0],
+                [''],
+                ['MÉDIAS'],
+                ['Images totales', auditData.media.images],
                 ['Images avec alt', auditData.media.imagesWithAlt],
+                ['Images sans alt', auditData.media.imagesWithoutAlt],
+                ['Images GEO optimisées', auditData.media.geoOptimized?.images || 0],
                 ['Vidéos', auditData.media.videos],
+                ['Vidéos GEO optimisées', auditData.media.geoOptimized?.videos || 0],
                 ['Audio', auditData.media.audios],
+                ['Audio GEO optimisés', auditData.media.geoOptimized?.audios || 0],
+                [''],
+                ['CONTENU STRUCTURÉ'],
                 ['FAQ', auditData.content.faq],
-                ['Citations', auditData.content.blockquotes],
-                ['Schema.org HTML', auditData.content.hasSchemaOrg ? 'Oui' : 'Non'],
-                ['JSON-LD', auditData.content.hasJSONLD ? 'Oui' : 'Non']
-            ].map(row => row.join(';')).join('\n');
+                ['FAQ Schema.org', auditData.content.hasFAQSchema ? 'Oui' : 'Non'],
+                ['Citations (blockquote)', auditData.content.blockquotes],
+                ['Éléments cite', auditData.content.cites || 0],
+                [''],
+                ['MÉTADONNÉES'],
+                ['Title présent', auditData.metadata.hasTitle ? 'Oui' : 'Non'],
+                ['Title longueur', auditData.metadata.titleLength],
+                ['Description présente', auditData.metadata.hasDescription ? 'Oui' : 'Non'],
+                ['Description longueur', auditData.metadata.descriptionLength],
+                ['Open Graph', auditData.metadata.hasOG ? 'Oui' : 'Non'],
+                [''],
+                ['SCHEMA.ORG'],
+                ['JSON-LD présent', auditData.content.hasJSONLD ? 'Oui' : 'Non'],
+                ['Microdata présent', auditData.content.hasSchemaOrg ? 'Oui' : 'Non'],
+                ['Scripts JSON-LD détectés', auditData.jsonld?.length || 0]
+            ];
             
-            const blob = new Blob([csv], { type: 'text/csv' });
+            // Ajouter les recommandations
+            if (auditData.recommendations && auditData.recommendations.length > 0) {
+                csv.push(['']);
+                csv.push(['RECOMMANDATIONS']);
+                auditData.recommendations.forEach((rec, index) => {
+                    csv.push([`${index + 1}`, rec.message || rec]);
+                });
+            }
+            
+            const csvContent = csv.map(row => row.join(';')).join('\n');
+            
+            const BOM = '\uFEFF'; // UTF-8 BOM pour Excel
+            const blob = new Blob([BOM + csvContent], { type: 'text/csv;charset=utf-8;' });
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url;
-            a.download = `audit-geo-${new Date().getTime()}.csv`;
+            a.download = `audit-geo-${auditData.score}-${Date.now()}.csv`;
             a.click();
+            URL.revokeObjectURL(url);
         }
     </script>
 </body>

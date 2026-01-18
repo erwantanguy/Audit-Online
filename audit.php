@@ -221,7 +221,7 @@ function analyzeHTML($html, $url, $pageType) {
     
     // Calcul du score global
     $audit['breakdown'] = calculateBreakdown($audit, $pageType);
-    $audit['score'] = array_sum($audit['breakdown']);
+    $audit['score'] = floorTo2Decimals(array_sum($audit['breakdown']));
     $audit['recommendations'] = generateRecommendations($audit);
     
     return $audit;
@@ -507,6 +507,13 @@ function analyzeMetadata($xpath) {
 }
 
 /**
+ * Arrondit un nombre à 2 décimales vers le bas
+ */
+function floorTo2Decimals($number) {
+    return floor($number * 100) / 100;
+}
+
+/**
  * Calcul de la répartition du score
  */
 function calculateBreakdown($audit, $pageType) {
@@ -527,7 +534,7 @@ function calculateBreakdown($audit, $pageType) {
     if ($audit['entities']['person'] > 0) $breakdown['entities'] += 5 * min($audit['entities']['person'], 2);
     if ($totalEntities >= 3) $breakdown['entities'] += 10;
     
-    $breakdown['entities'] = min(30, $breakdown['entities']);
+    $breakdown['entities'] = floorTo2Decimals(min(30, $breakdown['entities']));
     
     // MÉDIAS (max 25 points)
     if ($audit['media']['images'] > 0) {
@@ -537,7 +544,7 @@ function calculateBreakdown($audit, $pageType) {
     if ($audit['media']['videos'] > 0) $breakdown['media'] += 10;
     if ($audit['media']['audios'] > 0) $breakdown['media'] += 5;
     
-    $breakdown['media'] = min(25, $breakdown['media']);
+    $breakdown['media'] = floorTo2Decimals(min(25, $breakdown['media']));
     
     // STRUCTURE (max 25 points)
     if ($audit['content']['faq'] >= 2) $breakdown['structure'] += 10;
@@ -545,7 +552,7 @@ function calculateBreakdown($audit, $pageType) {
     if ($audit['content']['blockquotes'] > 0) $breakdown['structure'] += 5;
     if ($audit['content']['hasJSONLD']) $breakdown['structure'] += 5;
     
-    $breakdown['structure'] = min(25, $breakdown['structure']);
+    $breakdown['structure'] = floorTo2Decimals(min(25, $breakdown['structure']));
     
     // MÉTADONNÉES (max 20 points)
     if ($audit['metadata']['hasTitle']) $breakdown['metadata'] += 5;
@@ -553,7 +560,7 @@ function calculateBreakdown($audit, $pageType) {
     if ($audit['metadata']['hasOG']) $breakdown['metadata'] += 5;
     if ($audit['content']['hasJSONLD']) $breakdown['metadata'] += 5;
     
-    $breakdown['metadata'] = min(20, $breakdown['metadata']);
+    $breakdown['metadata'] = floorTo2Decimals(min(20, $breakdown['metadata']));
     
     return $breakdown;
 }
