@@ -562,6 +562,17 @@
                             Recommandé si la page refuse les connexions
                         </p>
                     </div>
+
+                    <div class="form-group">
+                        <label style="display: flex; align-items: center; gap: 10px; cursor: pointer;">
+                            <input type="checkbox" id="useScrapingService" name="useScrapingService">
+                            <span>Utiliser un service de scraping tiers (ScrapingBee, ScraperAPI...)</span>
+                        </label>
+                        <p style="font-size: 12px; color: #666; margin: 5px 0 0 30px;">
+                            Requiert une clé API configurée dans <code>scraping-config.json</code>. 
+                            <a href="https://www.scrapingbee.com/" target="_blank" style="color: #667eea;">Obtenir une clé gratuite</a>
+                        </p>
+                    </div>
                 </div>
 
                 <div id="htmlTab" class="tab-content">
@@ -752,13 +763,14 @@
                 const url = document.getElementById('url').value;
                 const pageType = document.getElementById('pageType').value;
                 const useProxy = document.getElementById('useProxy').checked;
+                const useScrapingService = document.getElementById('useScrapingService').checked;
                 
                 if (!url) {
                     alert('⚠️ Veuillez saisir une URL');
                     return;
                 }
                 
-                requestData = { url, pageType, useProxy, mode: 'url' };
+                requestData = { url, pageType, useProxy, useScrapingService, mode: 'url' };
                 document.getElementById('loadingUrl').textContent = url;
                 
             } else {

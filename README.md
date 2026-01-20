@@ -206,17 +206,71 @@ $audit['newMetric'] = analyzeNewMetric($xpath);
 
 ### Erreur "Impossible de récupérer la page"
 
-**Cause** : L'URL cible bloque les requêtes ou CURL n'est pas configuré
+**Cause** : L'URL cible bloque les requêtes (Cloudflare, anti-bot) ou CURL n'est pas configuré
 
-**Solution** :
+**Solutions** :
+
+1. **Mode compatible** : Cochez l'option "Utiliser un mode compatible" dans le formulaire
+2. **Service de scraping** : Configurez un service tiers (voir section ci-dessous)
+3. **Mode HTML** : Utilisez l'onglet "Analyser du HTML" en copiant le code source
+4. **Vérifier CURL** :
 ```bash
-# Vérifier CURL
 php -m | grep curl
 
 # Installer CURL si absent (Ubuntu/Debian)
 sudo apt-get install php-curl
 sudo systemctl restart apache2
 ```
+
+---
+
+## 🌐 Services de scraping tiers
+
+Pour les sites protégés par Cloudflare ou des systèmes anti-bot, vous pouvez configurer un service de scraping tiers.
+
+### Services supportés
+
+| Service | Description | Tarification |
+|---------|-------------|--------------|
+| [ScrapingBee](https://www.scrapingbee.com/) | Excellent pour Cloudflare, JavaScript rendering | 1000 crédits gratuits |
+| [ScraperAPI](https://www.scraperapi.com/) | Rotation d'IP automatique, bon rapport qualité/prix | 1000 requêtes/mois gratuites |
+| [Browserless](https://www.browserless.io/) | Headless Chrome complet | Limité sans abonnement |
+| [ZenRows](https://www.zenrows.com/) | Anti-bot avec IA | 1000 crédits gratuits |
+
+### Configuration
+
+1. Créez un compte sur le service de votre choix
+2. Récupérez votre clé API
+3. Modifiez le fichier `scraping-config.json` :
+
+```json
+{
+    "service": "scrapingbee",
+    "api_key": "VOTRE_CLE_API",
+    "options": {
+        "render_js": "true",
+        "premium_proxy": "true",
+        "country_code": "fr"
+    }
+}
+```
+
+### Utilisation
+
+Une fois configuré :
+- **Option manuelle** : Cochez "Utiliser un service de scraping tiers" dans le formulaire
+- **Automatique** : Le service est utilisé en dernier recours si toutes les autres méthodes échouent
+
+### Stratégies de récupération
+
+L'outil utilise plusieurs stratégies en cascade :
+
+1. **Service de scraping** (si demandé et configuré)
+2. **Mode compatible avancé** : Google Cache, Web Archive, Googlebot UA, Mobile UA
+3. **Headers Chrome réalistes**
+4. **cURL basique**
+5. **file_get_contents**
+6. **Fallback service de scraping** (si configuré mais non demandé)
 
 ### Erreur "JSON invalide"
 

@@ -2,6 +2,7 @@
 /**
  * GEO Audit Tool - Backend PHP
  * Version améliorée avec contournement renforcé des protections
+ * + Support services de scraping tiers (ScrapingBee, ScraperAPI, Browserless)
  */
 
 error_reporting(E_ALL);
@@ -11,6 +12,8 @@ ini_set('error_log', __DIR__ . '/audit_errors.log');
 
 header('Content-Type: application/json');
 header('Access-Control-Allow-Origin: *');
+
+$SCRAPING_CONFIG = loadScrapingConfig();
 
 $input = json_decode(file_get_contents('php://input'), true);
 $mode = $input['mode'] ?? 'url';
@@ -29,6 +32,7 @@ if ($mode === 'html') {
 } else {
     $url = filter_var($input['url'] ?? '', FILTER_VALIDATE_URL);
     $useProxy = $input['useProxy'] ?? false;
+    $useScrapingService = $input['useScrapingService'] ?? false;
     
     if (!$url) {
         http_response_code(400);
@@ -43,12 +47,20 @@ if ($mode === 'html') {
     }
     
     try {
-        $html = fetchHTML($url, $useProxy);
+        $html = fetchHTML($url, $useProxy, $useScrapingService);
         if (!$html) {
+            $hasScrapingService = !empty($SCRAPING_CONFIG['service']);
             http_response_code(500);
             echo json_encode([
                 'error' => 'Impossible de récupérer la page',
-                'details' => 'La page ne répond pas, est inaccessible, ou bloque les requêtes. Essayez le mode "Analyser du HTML".'
+                'details' => 'La page est protégée par Cloudflare ou un système anti-bot. ' .
+                            'Toutes les méthodes de contournement ont échoué. ' .
+                            ($hasScrapingService 
+                                ? 'Le service de scraping configuré n\'a pas pu contourner la protection.' 
+                                : 'Conseil : configurez un service de scraping (ScrapingBee, ScraperAPI) dans scraping-config.json pour de meilleurs résultats.') . ' ' .
+                            'Sinon, utilisez le mode "Analyser du HTML" en copiant le code source depuis votre navigateur.',
+                'suggestion' => 'html_mode',
+                'scraping_configured' => $hasScrapingService
             ]);
             exit;
         }
@@ -77,28 +89,315 @@ try {
 }
 
 /**
+ * Charge la configuration des services de scraping
+ */
+function loadScrapingConfig() {
+    $configFile = __DIR__ . '/scraping-config.json';
+    
+    if (file_exists($configFile)) {
+        $config = json_decode(file_get_contents($configFile), true);
+        if ($config) {
+            return $config;
+        }
+    }
+    
+    return [
+        'service' => '',
+        'api_key' => '',
+        'options' => []
+    ];
+}
+
+/**
  * Récupère le HTML d'une URL avec stratégies multiples
  */
-function fetchHTML($url, $useProxy = false) {
+function fetchHTML($url, $useProxy = false, $useScrapingService = false) {
+    global $SCRAPING_CONFIG;
+    
+    // Stratégie 0: Service de scraping tiers (si demandé et configuré)
+    if ($useScrapingService && !empty($SCRAPING_CONFIG['service']) && !empty($SCRAPING_CONFIG['api_key'])) {
+        $html = fetchWithScrapingService($url, $SCRAPING_CONFIG);
+        if ($html && isValidHTML($html)) {
+            error_log("Succès avec service de scraping: " . $SCRAPING_CONFIG['service']);
+            return $html;
+        }
+    }
+    
     // Stratégie 1: Mode compatible avancé (si demandé)
     if ($useProxy) {
         $html = fetchWithAdvancedBypass($url);
-        if ($html) return $html;
+        if ($html && isValidHTML($html)) return $html;
     }
     
     // Stratégie 2: Headers réalistes (Chrome moderne)
     $html = fetchHTMLWithRealHeaders($url);
-    if ($html) return $html;
+    if ($html && isValidHTML($html)) return $html;
     
     // Stratégie 3: cURL basique (fallback)
     $html = fetchHTMLBasic($url);
-    if ($html) return $html;
+    if ($html && isValidHTML($html)) return $html;
     
     // Stratégie 4: file_get_contents avec contexte (dernier recours)
     $html = fetchWithFileGetContents($url);
-    if ($html) return $html;
+    if ($html && isValidHTML($html)) return $html;
+    
+    // Stratégie 5: Service de scraping en dernier recours (si configuré mais pas demandé)
+    if (!$useScrapingService && !empty($SCRAPING_CONFIG['service']) && !empty($SCRAPING_CONFIG['api_key'])) {
+        error_log("Tentative de fallback avec service de scraping...");
+        $html = fetchWithScrapingService($url, $SCRAPING_CONFIG);
+        if ($html && isValidHTML($html)) {
+            error_log("Succès fallback avec service de scraping: " . $SCRAPING_CONFIG['service']);
+            return $html;
+        }
+    }
     
     return false;
+}
+
+/**
+ * Récupère le HTML via un service de scraping tiers
+ */
+function fetchWithScrapingService($url, $config) {
+    $service = strtolower($config['service']);
+    $apiKey = $config['api_key'];
+    $options = $config['options'] ?? [];
+    
+    switch ($service) {
+        case 'scrapingbee':
+            return fetchWithScrapingBee($url, $apiKey, $options);
+        case 'scraperapi':
+            return fetchWithScraperAPI($url, $apiKey, $options);
+        case 'browserless':
+            return fetchWithBrowserless($url, $apiKey, $options);
+        case 'zenrows':
+            return fetchWithZenRows($url, $apiKey, $options);
+        default:
+            error_log("Service de scraping inconnu: $service");
+            return false;
+    }
+}
+
+/**
+ * ScrapingBee - https://www.scrapingbee.com/
+ * Excellent pour contourner Cloudflare avec JavaScript rendering
+ */
+function fetchWithScrapingBee($url, $apiKey, $options = []) {
+    $params = [
+        'api_key' => $apiKey,
+        'url' => $url,
+        'render_js' => $options['render_js'] ?? 'true',
+        'premium_proxy' => $options['premium_proxy'] ?? 'true',
+        'country_code' => $options['country_code'] ?? 'fr',
+        'block_ads' => 'true',
+        'block_resources' => 'false',
+        'wait' => $options['wait'] ?? '3000',
+    ];
+    
+    $apiUrl = 'https://app.scrapingbee.com/api/v1/?' . http_build_query($params);
+    
+    $ch = curl_init();
+    curl_setopt_array($ch, [
+        CURLOPT_URL => $apiUrl,
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_TIMEOUT => 90,
+        CURLOPT_CONNECTTIMEOUT => 30,
+        CURLOPT_SSL_VERIFYPEER => false,
+    ]);
+    
+    $html = curl_exec($ch);
+    $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    $error = curl_error($ch);
+    curl_close($ch);
+    
+    if ($error) {
+        error_log("ScrapingBee Error: $error");
+        return false;
+    }
+    
+    if ($httpCode === 200 && strlen($html) > 500) {
+        error_log("ScrapingBee: Succès pour URL: $url");
+        return $html;
+    }
+    
+    error_log("ScrapingBee: Échec HTTP $httpCode pour URL: $url");
+    return false;
+}
+
+/**
+ * ScraperAPI - https://www.scraperapi.com/
+ * Bon rapport qualité/prix avec rotation d'IP automatique
+ */
+function fetchWithScraperAPI($url, $apiKey, $options = []) {
+    $params = [
+        'api_key' => $apiKey,
+        'url' => $url,
+        'render' => $options['render'] ?? 'true',
+        'country_code' => $options['country_code'] ?? 'fr',
+        'premium' => $options['premium'] ?? 'true',
+    ];
+    
+    $apiUrl = 'https://api.scraperapi.com/?' . http_build_query($params);
+    
+    $ch = curl_init();
+    curl_setopt_array($ch, [
+        CURLOPT_URL => $apiUrl,
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_TIMEOUT => 120,
+        CURLOPT_CONNECTTIMEOUT => 30,
+        CURLOPT_SSL_VERIFYPEER => false,
+    ]);
+    
+    $html = curl_exec($ch);
+    $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    $error = curl_error($ch);
+    curl_close($ch);
+    
+    if ($error) {
+        error_log("ScraperAPI Error: $error");
+        return false;
+    }
+    
+    if ($httpCode === 200 && strlen($html) > 500) {
+        error_log("ScraperAPI: Succès pour URL: $url");
+        return $html;
+    }
+    
+    error_log("ScraperAPI: Échec HTTP $httpCode pour URL: $url");
+    return false;
+}
+
+/**
+ * Browserless - https://www.browserless.io/
+ * Headless Chrome complet dans le cloud
+ */
+function fetchWithBrowserless($url, $apiKey, $options = []) {
+    $apiUrl = 'https://chrome.browserless.io/content?token=' . $apiKey;
+    
+    $payload = json_encode([
+        'url' => $url,
+        'waitFor' => $options['wait_for'] ?? 3000,
+        'gotoOptions' => [
+            'waitUntil' => 'networkidle2',
+            'timeout' => 60000
+        ],
+        'userAgent' => 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36'
+    ]);
+    
+    $ch = curl_init();
+    curl_setopt_array($ch, [
+        CURLOPT_URL => $apiUrl,
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_POST => true,
+        CURLOPT_POSTFIELDS => $payload,
+        CURLOPT_HTTPHEADER => [
+            'Content-Type: application/json',
+            'Cache-Control: no-cache'
+        ],
+        CURLOPT_TIMEOUT => 90,
+        CURLOPT_CONNECTTIMEOUT => 30,
+        CURLOPT_SSL_VERIFYPEER => false,
+    ]);
+    
+    $html = curl_exec($ch);
+    $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    $error = curl_error($ch);
+    curl_close($ch);
+    
+    if ($error) {
+        error_log("Browserless Error: $error");
+        return false;
+    }
+    
+    if ($httpCode === 200 && strlen($html) > 500) {
+        error_log("Browserless: Succès pour URL: $url");
+        return $html;
+    }
+    
+    error_log("Browserless: Échec HTTP $httpCode pour URL: $url");
+    return false;
+}
+
+/**
+ * ZenRows - https://www.zenrows.com/
+ * Spécialisé anti-bot avec AI
+ */
+function fetchWithZenRows($url, $apiKey, $options = []) {
+    $params = [
+        'apikey' => $apiKey,
+        'url' => $url,
+        'js_render' => $options['js_render'] ?? 'true',
+        'antibot' => $options['antibot'] ?? 'true',
+        'premium_proxy' => $options['premium_proxy'] ?? 'true',
+    ];
+    
+    $apiUrl = 'https://api.zenrows.com/v1/?' . http_build_query($params);
+    
+    $ch = curl_init();
+    curl_setopt_array($ch, [
+        CURLOPT_URL => $apiUrl,
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_TIMEOUT => 90,
+        CURLOPT_CONNECTTIMEOUT => 30,
+        CURLOPT_SSL_VERIFYPEER => false,
+    ]);
+    
+    $html = curl_exec($ch);
+    $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    $error = curl_error($ch);
+    curl_close($ch);
+    
+    if ($error) {
+        error_log("ZenRows Error: $error");
+        return false;
+    }
+    
+    if ($httpCode === 200 && strlen($html) > 500) {
+        error_log("ZenRows: Succès pour URL: $url");
+        return $html;
+    }
+    
+    error_log("ZenRows: Échec HTTP $httpCode pour URL: $url");
+    return false;
+}
+
+/**
+ * Vérifie si le HTML récupéré est valide (pas une page de challenge)
+ */
+function isValidHTML($html) {
+    if (empty($html) || strlen($html) < 500) {
+        return false;
+    }
+    
+    $invalidPatterns = [
+        'Checking your browser',
+        'Just a moment...',
+        'Please wait while we verify',
+        'cf-browser-verification',
+        'challenge-platform',
+        '_cf_chl_opt',
+        'Cloudflare Ray ID',
+        'Enable JavaScript and cookies',
+        'Attention Required!',
+        'DDoS protection by',
+        'Incapsula incident ID',
+        'Access denied',
+        'Bot verification',
+        'please complete the security check'
+    ];
+    
+    foreach ($invalidPatterns as $pattern) {
+        if (stripos($html, $pattern) !== false) {
+            error_log("HTML invalide détecté: contient '$pattern'");
+            return false;
+        }
+    }
+    
+    if (!preg_match('/<(html|head|body|div|article|main|section)/i', $html)) {
+        error_log("HTML invalide: pas de structure HTML standard");
+        return false;
+    }
+    
+    return true;
 }
 
 /**
@@ -106,20 +405,191 @@ function fetchHTML($url, $useProxy = false) {
  */
 function fetchWithAdvancedBypass($url) {
     $attempts = [
+        'fetchWithGoogleCacheProxy',
+        'fetchWithWebArchive',
+        'fetchAsGoogleBot',
         'fetchWithCloudflareBypass',
         'fetchWithRotatingUserAgents',
         'fetchWithDelayAndRetry',
-        'fetchWithTor' // Si disponible
+        'fetchWithMobileUA'
     ];
     
     foreach ($attempts as $method) {
         if (function_exists($method)) {
             $html = $method($url);
-            if ($html) {
+            if ($html && isValidHTML($html)) {
                 error_log("Succès avec méthode: $method pour URL: $url");
                 return $html;
             }
         }
+    }
+    
+    return false;
+}
+
+/**
+ * Tentative via Google Cache (contourne souvent les protections)
+ */
+function fetchWithGoogleCacheProxy($url) {
+    $cacheUrl = 'https://webcache.googleusercontent.com/search?q=cache:' . urlencode($url);
+    
+    $ch = curl_init();
+    curl_setopt_array($ch, [
+        CURLOPT_URL => $cacheUrl,
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_FOLLOWLOCATION => true,
+        CURLOPT_MAXREDIRS => 5,
+        CURLOPT_TIMEOUT => 30,
+        CURLOPT_SSL_VERIFYPEER => false,
+        CURLOPT_USERAGENT => 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
+        CURLOPT_HTTPHEADER => [
+            'Accept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+            'Accept-Language: fr-FR,fr;q=0.9,en;q=0.8',
+        ],
+        CURLOPT_ENCODING => '',
+    ]);
+    
+    $html = curl_exec($ch);
+    $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+    
+    if ($httpCode === 200 && strlen($html) > 1000) {
+        $html = preg_replace('/<div[^>]*id="google-cache-hdr"[^>]*>.*?<\/div>/s', '', $html);
+        error_log("Succès via Google Cache pour URL: $url");
+        return $html;
+    }
+    
+    return false;
+}
+
+/**
+ * Tentative via Web Archive (Wayback Machine)
+ */
+function fetchWithWebArchive($url) {
+    $archiveApiUrl = 'https://archive.org/wayback/available?url=' . urlencode($url);
+    
+    $ch = curl_init();
+    curl_setopt_array($ch, [
+        CURLOPT_URL => $archiveApiUrl,
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_TIMEOUT => 15,
+        CURLOPT_SSL_VERIFYPEER => false,
+    ]);
+    
+    $response = curl_exec($ch);
+    curl_close($ch);
+    
+    $data = json_decode($response, true);
+    
+    if (isset($data['archived_snapshots']['closest']['url'])) {
+        $archiveUrl = $data['archived_snapshots']['closest']['url'];
+        
+        $ch = curl_init();
+        curl_setopt_array($ch, [
+            CURLOPT_URL => $archiveUrl,
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_FOLLOWLOCATION => true,
+            CURLOPT_TIMEOUT => 30,
+            CURLOPT_SSL_VERIFYPEER => false,
+            CURLOPT_USERAGENT => 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+            CURLOPT_ENCODING => '',
+        ]);
+        
+        $html = curl_exec($ch);
+        $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        curl_close($ch);
+        
+        if ($httpCode === 200 && strlen($html) > 1000) {
+            error_log("Succès via Web Archive pour URL: $url");
+            return $html;
+        }
+    }
+    
+    return false;
+}
+
+/**
+ * Se faire passer pour Googlebot (souvent whitelist)
+ */
+function fetchAsGoogleBot($url) {
+    $googleBotUAs = [
+        'Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)',
+        'Mozilla/5.0 (Linux; Android 6.0.1; Nexus 5X Build/MMB29P) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)',
+        'Googlebot/2.1 (+http://www.google.com/bot.html)',
+    ];
+    
+    foreach ($googleBotUAs as $ua) {
+        $ch = curl_init();
+        curl_setopt_array($ch, [
+            CURLOPT_URL => $url,
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_FOLLOWLOCATION => true,
+            CURLOPT_MAXREDIRS => 5,
+            CURLOPT_TIMEOUT => 30,
+            CURLOPT_SSL_VERIFYPEER => false,
+            CURLOPT_USERAGENT => $ua,
+            CURLOPT_HTTPHEADER => [
+                'Accept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+                'Accept-Language: en-US,en;q=0.5',
+                'From: googlebot(at)googlebot.com',
+            ],
+            CURLOPT_ENCODING => '',
+        ]);
+        
+        $html = curl_exec($ch);
+        $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        curl_close($ch);
+        
+        if ($httpCode === 200 && strlen($html) > 1000) {
+            error_log("Succès avec Googlebot UA pour URL: $url");
+            return $html;
+        }
+    }
+    
+    return false;
+}
+
+/**
+ * User-Agent mobile (parfois moins protégé)
+ */
+function fetchWithMobileUA($url) {
+    $mobileUAs = [
+        'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1',
+        'Mozilla/5.0 (Linux; Android 14; SM-S928B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36',
+        'Mozilla/5.0 (Linux; Android 14; Pixel 8 Pro) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36',
+    ];
+    
+    $randomUA = $mobileUAs[array_rand($mobileUAs)];
+    
+    $ch = curl_init();
+    curl_setopt_array($ch, [
+        CURLOPT_URL => $url,
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_FOLLOWLOCATION => true,
+        CURLOPT_MAXREDIRS => 10,
+        CURLOPT_TIMEOUT => 45,
+        CURLOPT_SSL_VERIFYPEER => false,
+        CURLOPT_USERAGENT => $randomUA,
+        CURLOPT_HTTPHEADER => [
+            'Accept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+            'Accept-Language: fr-FR,fr;q=0.9',
+            'Accept-Encoding: gzip, deflate',
+            'Upgrade-Insecure-Requests: 1',
+            'Sec-Fetch-Dest: document',
+            'Sec-Fetch-Mode: navigate',
+            'Sec-Fetch-Site: none',
+            'Sec-Fetch-User: ?1',
+        ],
+        CURLOPT_ENCODING => '',
+    ]);
+    
+    $html = curl_exec($ch);
+    $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+    
+    if ($httpCode === 200 && strlen($html) > 1000) {
+        error_log("Succès avec Mobile UA pour URL: $url");
+        return $html;
     }
     
     return false;

@@ -1,0 +1,52 @@
+{
+    "service": "",
+    "api_key": "",
+    "options": {
+        "render_js": "true",
+        "premium_proxy": "true",
+        "country_code": "fr",
+        "wait": "3000",
+        "antibot": "true"
+    },
+    
+    "_documentation": {
+        "description": "Configuration des services de scraping tiers pour Audit-Online",
+        "supported_services": {
+            "scrapingbee": {
+                "url": "https://www.scrapingbee.com/",
+                "description": "Excellent pour contourner Cloudflare avec JavaScript rendering",
+                "pricing": "Freemium - 1000 crédits gratuits à l'inscription",
+                "options": ["render_js", "premium_proxy", "country_code", "wait", "block_ads"]
+            },
+            "scraperapi": {
+                "url": "https://www.scraperapi.com/",
+                "description": "Bon rapport qualité/prix avec rotation d'IP automatique",
+                "pricing": "Freemium - 1000 requêtes gratuites/mois",
+                "options": ["render", "country_code", "premium"]
+            },
+            "browserless": {
+                "url": "https://www.browserless.io/",
+                "description": "Headless Chrome complet dans le cloud",
+                "pricing": "Freemium - limité sans abonnement",
+                "options": ["wait_for"]
+            },
+            "zenrows": {
+                "url": "https://www.zenrows.com/",
+                "description": "Spécialisé anti-bot avec IA",
+                "pricing": "Freemium - 1000 crédits gratuits à l'inscription",
+                "options": ["js_render", "antibot", "premium_proxy"]
+            }
+        },
+        "example_configuration": {
+            "scrapingbee": {
+                "service": "scrapingbee",
+                "api_key": "VOTRE_CLE_API_SCRAPINGBEE"
+            },
+            "scraperapi": {
+                "service": "scraperapi", 
+                "api_key": "VOTRE_CLE_API_SCRAPERAPI"
+            }
+        },
+        "usage": "Remplissez 'service' avec le nom du service (scrapingbee, scraperapi, browserless, zenrows) et 'api_key' avec votre clé API. Les options sont facultatives et ont des valeurs par défaut."
+    }
+}
