@@ -812,6 +812,108 @@ function exportPDF() {
         });
 
         // ==============================================
+        // PAGE WORDPRESS: PLUGINS RECOMMANDES (si WordPress)
+        // ==============================================
+
+        if (auditData.isWordPress) {
+            doc.addPage();
+            pageNum++;
+            y = 20;
+            addFooter();
+
+            addSectionTitle('PLUGINS WORDPRESS RECOMMANDES', '');
+
+            doc.setFontSize(10);
+            doc.setTextColor(100, 100, 100);
+            y = addText('Votre site utilise WordPress ! Optimisez votre GEO avec ces plugins gratuits :', margin, y, contentWidth);
+            y += 8;
+            doc.setTextColor(0, 0, 0);
+
+            // GEO Blocks Suite
+            createBox(margin, y, contentWidth, 55, [232, 244, 253]);
+            
+            doc.setFontSize(14);
+            doc.setFont('helvetica', 'bold');
+            doc.setTextColor(102, 126, 234);
+            doc.text('GEO Blocks Suite', margin + 5, y + 10);
+            
+            doc.setFillColor(40, 167, 69);
+            doc.roundedRect(margin + 75, y + 5, 18, 6, 1, 1, 'F');
+            doc.setFontSize(7);
+            doc.setTextColor(255, 255, 255);
+            doc.text('GRATUIT', margin + 77, y + 9);
+            
+            doc.setTextColor(0, 0, 0);
+            doc.setFont('helvetica', 'normal');
+            doc.setFontSize(9);
+            
+            let blockY = y + 18;
+            blockY = addText('Blocs Gutenberg optimises pour le SEO et les moteurs d\'IA :', margin + 5, blockY, contentWidth - 15);
+            blockY += 2;
+            blockY = addText('- Blockquote GEO : Citations avec Schema.org (auteur, source, date)', margin + 10, blockY, contentWidth - 20);
+            blockY = addText('- FAQ GEO : Questions/reponses avec FAQPage Schema', margin + 10, blockY, contentWidth - 20);
+            blockY = addText('- Image GEO : Images avec metadonnees enrichies et alt optimise', margin + 10, blockY, contentWidth - 20);
+            blockY = addText('- Video GEO / Audio GEO : Medias avec VideoObject/AudioObject Schema', margin + 10, blockY, contentWidth - 20);
+            
+            doc.setFontSize(8);
+            doc.setTextColor(102, 126, 234);
+            doc.text('wiki.ticoet.me/doku.php?id=geo_blocks_suite', margin + 5, y + 50);
+            doc.setTextColor(0, 0, 0);
+            
+            y += 62;
+
+            // GEO Authority Suite
+            createBox(margin, y, contentWidth, 55, [255, 248, 220]);
+            
+            doc.setFontSize(14);
+            doc.setFont('helvetica', 'bold');
+            doc.setTextColor(180, 130, 0);
+            doc.text('GEO Authority Suite', margin + 5, y + 10);
+            
+            doc.setFillColor(40, 167, 69);
+            doc.roundedRect(margin + 85, y + 5, 18, 6, 1, 1, 'F');
+            doc.setFontSize(7);
+            doc.setTextColor(255, 255, 255);
+            doc.text('GRATUIT', margin + 87, y + 9);
+            
+            doc.setTextColor(0, 0, 0);
+            doc.setFont('helvetica', 'normal');
+            doc.setFontSize(9);
+            
+            let authY = y + 18;
+            authY = addText('Suite complete pour l\'autorite et la visibilite IA :', margin + 5, authY, contentWidth - 15);
+            authY += 2;
+            authY = addText('- Audits GEO internes automatises sur toutes vos pages', margin + 10, authY, contentWidth - 20);
+            authY = addText('- Creation automatique des entites Schema.org manquantes', margin + 10, authY, contentWidth - 20);
+            authY = addText('- Generation du fichier llms.txt pour les LLM (ChatGPT, Claude, etc.)', margin + 10, authY, contentWidth - 20);
+            authY = addText('- Tableau de bord centralise avec scores et recommandations', margin + 10, authY, contentWidth - 20);
+            
+            doc.setFontSize(8);
+            doc.setTextColor(180, 130, 0);
+            doc.text('wiki.ticoet.me/doku.php?id=entity-authority-signals', margin + 5, y + 50);
+            doc.setTextColor(0, 0, 0);
+            
+            y += 62;
+
+            // Call to action
+            checkPageBreak(35);
+            createBox(margin, y, contentWidth, 30, [212, 237, 218]);
+            
+            doc.setFontSize(11);
+            doc.setFont('helvetica', 'bold');
+            doc.setTextColor(40, 163, 42);
+            doc.text('Passez a l\'action !', margin + 5, y + 10);
+            
+            doc.setFont('helvetica', 'normal');
+            doc.setFontSize(9);
+            doc.setTextColor(0, 0, 0);
+            doc.text('1. Telechargez les plugins sur wiki.ticoet.me', margin + 5, y + 18);
+            doc.text('2. Installez-les dans WordPress (Extensions > Ajouter > Televerser)', margin + 5, y + 24);
+            
+            y += 38;
+        }
+
+        // ==============================================
         // PAGE FINALE: RESSOURCES
         // ==============================================
 

@@ -911,6 +911,29 @@ function fetchWithFileGetContents($url) {
 // (Copier tout le reste du fichier audit.php original ici)
 
 /**
+ * Détecte si le site utilise WordPress
+ */
+function detectWordPress($html, $xpath) {
+    $indicators = [
+        'wp-content' => strpos($html, 'wp-content') !== false,
+        'wp-includes' => strpos($html, 'wp-includes') !== false,
+        'wordpress' => stripos($html, 'wordpress') !== false,
+        'wp-json' => strpos($html, 'wp-json') !== false,
+        'woocommerce' => strpos($html, 'woocommerce') !== false,
+        'elementor' => strpos($html, 'elementor') !== false,
+        'yoast' => stripos($html, 'yoast') !== false,
+        'generator_wp' => preg_match('/<meta[^>]*name=["\']generator["\'][^>]*content=["\']WordPress/i', $html),
+    ];
+    
+    $score = 0;
+    foreach ($indicators as $value) {
+        if ($value) $score++;
+    }
+    
+    return $score >= 2;
+}
+
+/**
  * Analyse complète du HTML
  */
 function analyzeHTML($html, $url, $pageType) {
@@ -923,6 +946,7 @@ function analyzeHTML($html, $url, $pageType) {
         'pageType' => $pageType,
         'timestamp' => date('Y-m-d H:i:s'),
         'score' => 0,
+        'isWordPress' => detectWordPress($html, $xpath),
         'entities' => analyzeEntities($html, $xpath),
         'media' => analyzeMedia($xpath),
         'content' => analyzeContent($html, $xpath),
