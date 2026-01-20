@@ -1180,73 +1180,206 @@
                 return;
             }
             
-            const csv = [
-                ['Métrique', 'Valeur'],
-                ['URL', auditData.url],
-                ['Type de page', auditData.pageType],
-                ['Date audit', auditData.timestamp || new Date().toLocaleString('fr-FR')],
-                [''],
-                ['SCORE GLOBAL', auditData.score],
-                [''],
-                ['RÉPARTITION DU SCORE'],
-                ['Entités', `${auditData.breakdown.entities}/30`],
-                ['Médias', `${auditData.breakdown.media}/25`],
-                ['Structure', `${auditData.breakdown.structure}/25`],
-                ['Métadonnées', `${auditData.breakdown.metadata}/20`],
-                [''],
-                ['ENTITÉS'],
-                ['Organizations', auditData.entities.organization],
-                ['Persons', auditData.entities.person],
-                ['Services', auditData.entities.service],
-                ['Products', auditData.entities.product],
-                ['LocalBusiness', auditData.entities.localBusiness || 0],
-                [''],
-                ['MÉDIAS'],
-                ['Images totales', auditData.media.images],
-                ['Images avec alt', auditData.media.imagesWithAlt],
-                ['Images sans alt', auditData.media.imagesWithoutAlt],
-                ['Images GEO optimisées', auditData.media.geoOptimized?.images || 0],
-                ['Vidéos', auditData.media.videos],
-                ['Vidéos GEO optimisées', auditData.media.geoOptimized?.videos || 0],
-                ['Audio', auditData.media.audios],
-                ['Audio GEO optimisés', auditData.media.geoOptimized?.audios || 0],
-                [''],
-                ['CONTENU STRUCTURÉ'],
-                ['FAQ', auditData.content.faq],
-                ['FAQ Schema.org', auditData.content.hasFAQSchema ? 'Oui' : 'Non'],
-                ['Citations (blockquote)', auditData.content.blockquotes],
-                ['Éléments cite', auditData.content.cites || 0],
-                [''],
-                ['MÉTADONNÉES'],
-                ['Title présent', auditData.metadata.hasTitle ? 'Oui' : 'Non'],
-                ['Title longueur', auditData.metadata.titleLength],
-                ['Description présente', auditData.metadata.hasDescription ? 'Oui' : 'Non'],
-                ['Description longueur', auditData.metadata.descriptionLength],
-                ['Open Graph', auditData.metadata.hasOG ? 'Oui' : 'Non'],
-                [''],
-                ['SCHEMA.ORG'],
-                ['JSON-LD présent', auditData.content.hasJSONLD ? 'Oui' : 'Non'],
-                ['Microdata présent', auditData.content.hasSchemaOrg ? 'Oui' : 'Non'],
-                ['Scripts JSON-LD détectés', auditData.jsonld?.length || 0]
-            ];
+            const escapeCSV = (val) => {
+                if (val === null || val === undefined) return '';
+                const str = String(val);
+                if (str.includes(';') || str.includes('"') || str.includes('\n')) {
+                    return '"' + str.replace(/"/g, '""') + '"';
+                }
+                return str;
+            };
             
-            // Ajouter les recommandations
-            if (auditData.recommendations && auditData.recommendations.length > 0) {
+            const scoreDisplay = Number.isInteger(auditData.score) ? auditData.score : auditData.score.toFixed(2);
+            const dateAudit = auditData.timestamp || new Date().toLocaleDateString('fr-FR', { year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+            
+            const csv = [];
+            
+            csv.push(['=== RAPPORT AUDIT GEO ===', '', '', '', '']);
+            csv.push(['']);
+            csv.push(['URL analysée', escapeCSV(auditData.url)]);
+            csv.push(['Type de page', auditData.pageType]);
+            csv.push(['Date de l\'audit', dateAudit]);
+            csv.push(['Site WordPress', auditData.isWordPress ? 'Oui' : 'Non']);
+            csv.push(['']);
+            
+            csv.push(['=== SCORE GLOBAL ===', '', '', '', '']);
+            csv.push(['Score GEO', scoreDisplay, '/100', '', '']);
+            csv.push(['']);
+            
+            csv.push(['=== RÉPARTITION DU SCORE ===', '', '', '', '']);
+            csv.push(['Catégorie', 'Score', 'Maximum', 'Pourcentage', 'Statut']);
+            const bd = auditData.breakdown;
+            const formatScore = (val) => Number.isInteger(val) ? val : val.toFixed(2);
+            csv.push(['Entités Schema.org', formatScore(bd.entities), 30, Math.round((bd.entities/30)*100) + '%', bd.entities >= 20 ? 'OK' : bd.entities >= 10 ? 'Moyen' : 'Faible']);
+            csv.push(['Médias optimisés', formatScore(bd.media), 25, Math.round((bd.media/25)*100) + '%', bd.media >= 17 ? 'OK' : bd.media >= 10 ? 'Moyen' : 'Faible']);
+            csv.push(['Structure contenu', formatScore(bd.structure), 25, Math.round((bd.structure/25)*100) + '%', bd.structure >= 17 ? 'OK' : bd.structure >= 10 ? 'Moyen' : 'Faible']);
+            csv.push(['Métadonnées', formatScore(bd.metadata), 20, Math.round((bd.metadata/20)*100) + '%', bd.metadata >= 14 ? 'OK' : bd.metadata >= 8 ? 'Moyen' : 'Faible']);
+            csv.push(['TOTAL', scoreDisplay, 100, Math.round(auditData.score) + '%', '']);
+            csv.push(['']);
+            
+            csv.push(['=== ENTITÉS SCHEMA.ORG ===', '', '', '', '']);
+            csv.push(['Type', 'Nombre', 'Détails', '', '']);
+            csv.push(['Organization', auditData.entities.organization, auditData.entities.organization > 0 ? 'Détecté' : 'Manquant - CRITIQUE']);
+            csv.push(['Person', auditData.entities.person, auditData.entities.person > 0 ? 'Détecté' : 'Non détecté']);
+            csv.push(['Service', auditData.entities.service, '']);
+            csv.push(['Product', auditData.entities.product, '']);
+            csv.push(['LocalBusiness', auditData.entities.localBusiness || 0, '']);
+            
+            if (auditData.entities.details && auditData.entities.details.length > 0) {
                 csv.push(['']);
-                csv.push(['RECOMMANDATIONS']);
-                auditData.recommendations.forEach((rec, index) => {
-                    csv.push([`${index + 1}`, rec.message || rec]);
+                csv.push(['--- Détail des entités ---', '', '', '', '']);
+                csv.push(['Type', 'Nom', 'Format', 'URL/Détails', '']);
+                auditData.entities.details.forEach(entity => {
+                    csv.push([
+                        entity.type,
+                        escapeCSV(entity.name),
+                        entity.hasJSONLD ? 'JSON-LD' : 'Microdata',
+                        escapeCSV(entity.url || entity.jobTitle || '')
+                    ]);
+                });
+            }
+            csv.push(['']);
+            
+            csv.push(['=== MÉDIAS ===', '', '', '', '']);
+            csv.push(['Type', 'Total', 'Optimisés', 'À corriger', 'GEO optimisés']);
+            csv.push(['Images', auditData.media.images, auditData.media.imagesWithAlt, auditData.media.imagesWithoutAlt, auditData.media.geoOptimized?.images || 0]);
+            csv.push(['Vidéos', auditData.media.videos, '-', '-', auditData.media.geoOptimized?.videos || 0]);
+            csv.push(['Audio', auditData.media.audios, '-', '-', auditData.media.geoOptimized?.audios || 0]);
+            
+            if (auditData.media.imagesWithoutAltDetails && auditData.media.imagesWithoutAltDetails.length > 0) {
+                csv.push(['']);
+                csv.push([`--- Images sans attribut alt (${auditData.media.imagesWithoutAltDetails.length}) ---`, '', '', '', '']);
+                csv.push(['N°', 'URL de l\'image', 'Largeur', 'Hauteur', 'Action']);
+                auditData.media.imagesWithoutAltDetails.forEach((img, idx) => {
+                    csv.push([
+                        idx + 1,
+                        escapeCSV(img.src),
+                        img.width || 'auto',
+                        img.height || 'auto',
+                        'Ajouter alt=""'
+                    ]);
+                });
+                csv.push(['Total à corriger', auditData.media.imagesWithoutAltDetails.length, '', '', '']);
+            }
+            csv.push(['']);
+            
+            csv.push(['=== CONTENU STRUCTURÉ ===', '', '', '', '']);
+            csv.push(['Élément', 'Quantité', 'Schema.org', 'Statut', '']);
+            csv.push(['FAQ', auditData.content.faq, auditData.content.hasFAQSchema ? 'FAQPage OK' : 'Non balisé', auditData.content.faq > 0 ? 'Présent' : 'Absent']);
+            csv.push(['Citations (blockquote)', auditData.content.blockquotes, '', auditData.content.blockquotes > 0 ? 'Présent' : 'Absent']);
+            csv.push(['Éléments cite', auditData.content.cites || 0, '', '']);
+            
+            if (auditData.content.faqDetails && auditData.content.faqDetails.length > 0) {
+                csv.push(['']);
+                csv.push([`--- FAQ détectées (${auditData.content.faqDetails.length}) ---`, '', '', '', '']);
+                csv.push(['N°', 'Question', 'Réponse (extrait)', 'Schema', '']);
+                auditData.content.faqDetails.slice(0, 10).forEach((faq, idx) => {
+                    const answerShort = faq.answer && faq.answer.length > 80 ? faq.answer.substring(0, 77) + '...' : (faq.answer || '');
+                    csv.push([
+                        idx + 1,
+                        escapeCSV(faq.question),
+                        escapeCSV(answerShort),
+                        faq.hasSchema ? 'Oui' : 'Non'
+                    ]);
                 });
             }
             
-            const csvContent = csv.map(row => row.join(';')).join('\n');
+            if (auditData.content.quotesDetails && auditData.content.quotesDetails.length > 0) {
+                csv.push(['']);
+                csv.push([`--- Citations détectées (${auditData.content.quotesDetails.length}) ---`, '', '', '', '']);
+                csv.push(['N°', 'Citation (extrait)', 'Auteur', 'Source', '']);
+                auditData.content.quotesDetails.slice(0, 10).forEach((quote, idx) => {
+                    const textShort = quote.text && quote.text.length > 60 ? quote.text.substring(0, 57) + '...' : (quote.text || '');
+                    csv.push([
+                        idx + 1,
+                        escapeCSV(textShort),
+                        escapeCSV(quote.author || ''),
+                        escapeCSV(quote.cite || '')
+                    ]);
+                });
+            }
+            csv.push(['']);
             
-            const BOM = '\uFEFF'; // UTF-8 BOM pour Excel
+            csv.push(['=== MÉTADONNÉES ===', '', '', '', '']);
+            csv.push(['Élément', 'Présent', 'Longueur', 'Contenu', 'Statut']);
+            csv.push(['Title', auditData.metadata.hasTitle ? 'Oui' : 'Non', auditData.metadata.titleLength || 0, escapeCSV(auditData.metadata.title || ''), auditData.metadata.hasTitle ? 'OK' : 'MANQUANT']);
+            csv.push(['Meta description', auditData.metadata.hasDescription ? 'Oui' : 'Non', auditData.metadata.descriptionLength || 0, escapeCSV((auditData.metadata.description || '').substring(0, 100)), auditData.metadata.hasDescription ? 'OK' : 'MANQUANT']);
+            csv.push(['Open Graph', auditData.metadata.hasOG ? 'Oui' : 'Non', '', escapeCSV(auditData.metadata.ogTitle || ''), auditData.metadata.hasOG ? 'OK' : 'À configurer']);
+            csv.push(['']);
+            
+            csv.push(['=== SCHEMA.ORG / JSON-LD ===', '', '', '', '']);
+            csv.push(['Format', 'Présent', 'Nombre de scripts', '', '']);
+            csv.push(['JSON-LD', auditData.content.hasJSONLD ? 'Oui' : 'Non', auditData.jsonld?.length || 0, '', '']);
+            csv.push(['Microdata HTML', auditData.content.hasSchemaOrg ? 'Oui' : 'Non', '', '', '']);
+            
+            if (auditData.jsonld && auditData.jsonld.length > 0) {
+                csv.push(['']);
+                csv.push(['--- Scripts JSON-LD détectés ---', '', '', '', '']);
+                csv.push(['N°', 'Type', '', '', '']);
+                auditData.jsonld.forEach((script, idx) => {
+                    csv.push([idx + 1, script.type || 'Unknown']);
+                });
+            }
+            csv.push(['']);
+            
+            csv.push(['=== RECOMMANDATIONS ===', '', '', '', '']);
+            csv.push(['Priorité', 'N°', 'Action à réaliser', 'Statut', '']);
+            
+            if (auditData.recommendations && auditData.recommendations.length > 0) {
+                const highRecs = auditData.recommendations.filter(r => r.priority === 'high');
+                const mediumRecs = auditData.recommendations.filter(r => r.priority === 'medium');
+                const lowRecs = auditData.recommendations.filter(r => r.priority === 'low');
+                
+                let recNum = 1;
+                highRecs.forEach(rec => {
+                    csv.push(['CRITIQUE', recNum++, escapeCSV(rec.message), '[ ]']);
+                });
+                mediumRecs.forEach(rec => {
+                    csv.push(['IMPORTANT', recNum++, escapeCSV(rec.message), '[ ]']);
+                });
+                lowRecs.forEach(rec => {
+                    csv.push(['OPTIONNEL', recNum++, escapeCSV(rec.message), '[ ]']);
+                });
+                
+                csv.push(['']);
+                csv.push(['Total recommandations', auditData.recommendations.length, '', '', '']);
+                csv.push(['Critiques', highRecs.length, '', '', '']);
+                csv.push(['Importantes', mediumRecs.length, '', '', '']);
+                csv.push(['Optionnelles', lowRecs.length, '', '', '']);
+            } else {
+                csv.push(['', '', 'Aucune recommandation - Excellent !', '', '']);
+            }
+            csv.push(['']);
+            
+            if (auditData.isWordPress) {
+                csv.push(['=== PLUGINS WORDPRESS RECOMMANDÉS ===', '', '', '', '']);
+                csv.push(['Plugin', 'Description', 'Lien', '', '']);
+                csv.push(['GEO Blocks Suite', 'Blocs Gutenberg SEO/GEO (FAQ, Blockquote, Image, Video, Audio)', 'wiki.ticoet.me/doku.php?id=geo_blocks_suite']);
+                csv.push(['GEO Authority Suite', 'Audits internes, entités auto, fichier llms.txt', 'wiki.ticoet.me/doku.php?id=entity-authority-signals']);
+                csv.push(['']);
+            }
+            
+            csv.push(['=== RESSOURCES ===', '', '', '', '']);
+            csv.push(['Outil', 'URL', '', '', '']);
+            csv.push(['Google Rich Results Test', 'search.google.com/test/rich-results']);
+            csv.push(['Schema.org Validator', 'validator.schema.org']);
+            csv.push(['Audit GEO Ticoët', 'audit.ticoet.me']);
+            csv.push(['Documentation GEO', 'ticoet.fr/geo']);
+            csv.push(['']);
+            csv.push(['Rapport généré par', 'GEO Audit Tool - ticoet.fr', '', '', '']);
+            
+            const csvContent = csv.map(row => row.map(cell => escapeCSV(cell)).join(';')).join('\n');
+            
+            const BOM = '\uFEFF';
             const blob = new Blob([BOM + csvContent], { type: 'text/csv;charset=utf-8;' });
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url;
-            a.download = `audit-geo-${auditData.score}-${Date.now()}.csv`;
+            
+            const urlSlug = auditData.url.replace(/https?:\/\//, '').replace(/[^a-z0-9]/gi, '-').substring(0, 30);
+            const dateSlug = new Date().toISOString().split('T')[0];
+            a.download = `audit-geo-${urlSlug}-${dateSlug}.csv`;
+            
             a.click();
             URL.revokeObjectURL(url);
         }
