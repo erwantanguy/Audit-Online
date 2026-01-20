@@ -1,6 +1,6 @@
 {
     "service": "scrapingbee",
-    "api_key": "YR3DDS0N3O401WB0OVIP9QQ313PYF6OIHIP8GUG2AIMTTFL0RAI9QTO1AWUGFX05QQLQW2C9LYQ0U0ZE",
+    "api_key": "VOTRE_CLE_API_SCRAPINGBEE",
     "options": {
         "render_js": "true",
         "premium_proxy": "true",
