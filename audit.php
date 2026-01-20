@@ -114,13 +114,18 @@ function loadScrapingConfig() {
 function fetchHTML($url, $useProxy = false, $useScrapingService = false) {
     global $SCRAPING_CONFIG;
     
+    error_log("fetchHTML: Début - URL: $url, useProxy: " . ($useProxy ? 'true' : 'false') . ", useScrapingService: " . ($useScrapingService ? 'true' : 'false'));
+    error_log("fetchHTML: Config service: " . ($SCRAPING_CONFIG['service'] ?? 'non défini') . ", API key présente: " . (!empty($SCRAPING_CONFIG['api_key']) ? 'oui' : 'non'));
+    
     // Stratégie 0: Service de scraping tiers (si demandé et configuré)
     if ($useScrapingService && !empty($SCRAPING_CONFIG['service']) && !empty($SCRAPING_CONFIG['api_key'])) {
+        error_log("fetchHTML: Tentative avec service de scraping: " . $SCRAPING_CONFIG['service']);
         $html = fetchWithScrapingService($url, $SCRAPING_CONFIG);
         if ($html && isValidHTML($html)) {
             error_log("Succès avec service de scraping: " . $SCRAPING_CONFIG['service']);
             return $html;
         }
+        error_log("fetchHTML: Échec du service de scraping, isValidHTML: " . ($html ? (isValidHTML($html) ? 'true' : 'false') : 'null'));
     }
     
     // Stratégie 1: Mode compatible avancé (si demandé)
@@ -182,6 +187,9 @@ function fetchWithScrapingService($url, $config) {
  * Excellent pour contourner Cloudflare avec JavaScript rendering
  */
 function fetchWithScrapingBee($url, $apiKey, $options = []) {
+    error_log("ScrapingBee: Début de la requête pour URL: $url");
+    error_log("ScrapingBee: API Key (5 premiers chars): " . substr($apiKey, 0, 5) . "...");
+    
     $params = [
         'api_key' => $apiKey,
         'url' => $url,
@@ -190,16 +198,17 @@ function fetchWithScrapingBee($url, $apiKey, $options = []) {
         'country_code' => $options['country_code'] ?? 'fr',
         'block_ads' => 'true',
         'block_resources' => 'false',
-        'wait' => $options['wait'] ?? '3000',
+        'wait' => $options['wait'] ?? '5000',
     ];
     
     $apiUrl = 'https://app.scrapingbee.com/api/v1/?' . http_build_query($params);
+    error_log("ScrapingBee: URL API construite (longueur: " . strlen($apiUrl) . ")");
     
     $ch = curl_init();
     curl_setopt_array($ch, [
         CURLOPT_URL => $apiUrl,
         CURLOPT_RETURNTRANSFER => true,
-        CURLOPT_TIMEOUT => 90,
+        CURLOPT_TIMEOUT => 120,
         CURLOPT_CONNECTTIMEOUT => 30,
         CURLOPT_SSL_VERIFYPEER => false,
     ]);
@@ -207,10 +216,13 @@ function fetchWithScrapingBee($url, $apiKey, $options = []) {
     $html = curl_exec($ch);
     $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
     $error = curl_error($ch);
+    $totalTime = curl_getinfo($ch, CURLINFO_TOTAL_TIME);
     curl_close($ch);
     
+    error_log("ScrapingBee: Réponse reçue - HTTP $httpCode, Taille: " . strlen($html) . " chars, Temps: {$totalTime}s");
+    
     if ($error) {
-        error_log("ScrapingBee Error: $error");
+        error_log("ScrapingBee cURL Error: $error");
         return false;
     }
     
@@ -219,7 +231,7 @@ function fetchWithScrapingBee($url, $apiKey, $options = []) {
         return $html;
     }
     
-    error_log("ScrapingBee: Échec HTTP $httpCode pour URL: $url");
+    error_log("ScrapingBee: Échec HTTP $httpCode pour URL: $url - Réponse: " . substr($html, 0, 500));
     return false;
 }
 
