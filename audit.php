@@ -1063,17 +1063,48 @@ function analyzeEntities($html, $xpath) {
 
 function analyzeMedia($xpath) {
     $images = $xpath->query('//img');
-    $imagesWithAlt = $xpath->query('//img[@alt]');
+    $imagesWithAlt = $xpath->query('//img[@alt and string-length(@alt) > 0]');
     $videos = $xpath->query('//video | //iframe[contains(@src, "youtube") or contains(@src, "vimeo")]');
     $audios = $xpath->query('//audio');
     $geoImages = $xpath->query('//*[contains(@class, "geo-image")]');
     $geoVideos = $xpath->query('//*[contains(@class, "geo-video")]');
     $geoAudios = $xpath->query('//*[contains(@class, "geo-audio")]');
     
+    $imagesWithoutAltDetails = [];
+    foreach ($images as $img) {
+        $alt = $img->getAttribute('alt');
+        if (empty($alt)) {
+            $src = $img->getAttribute('src');
+            if ($src) {
+                $imagesWithoutAltDetails[] = [
+                    'src' => $src,
+                    'width' => $img->getAttribute('width') ?: 'auto',
+                    'height' => $img->getAttribute('height') ?: 'auto',
+                    'class' => $img->getAttribute('class') ?: ''
+                ];
+            }
+        }
+    }
+    
+    $imagesDetails = [];
+    foreach ($images as $img) {
+        $src = $img->getAttribute('src');
+        $alt = $img->getAttribute('alt');
+        if ($src) {
+            $imagesDetails[] = [
+                'src' => $src,
+                'alt' => $alt ?: '',
+                'hasAlt' => !empty($alt)
+            ];
+        }
+    }
+    
     return [
         'images' => $images->length,
         'imagesWithAlt' => $imagesWithAlt->length,
         'imagesWithoutAlt' => $images->length - $imagesWithAlt->length,
+        'imagesWithoutAltDetails' => array_slice($imagesWithoutAltDetails, 0, 20),
+        'imagesDetails' => array_slice($imagesDetails, 0, 30),
         'videos' => $videos->length,
         'audios' => $audios->length,
         'geoOptimized' => [
