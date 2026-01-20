@@ -1,22 +1,25 @@
 <?php
 /**
  * GEO Audit Tool - Backend PHP
- * Version améliorée avec contournement renforcé des protections
+ * Analyse une URL et retourne les données GEO
  */
 
+// Activation des logs d'erreurs pour le debug
 error_reporting(E_ALL);
-ini_set('display_errors', 0);
+ini_set('display_errors', 0); // Ne pas afficher dans la réponse
 ini_set('log_errors', 1);
 ini_set('error_log', __DIR__ . '/audit_errors.log');
 
 header('Content-Type: application/json');
 header('Access-Control-Allow-Origin: *');
 
+// Récupération de l'URL à analyser
 $input = json_decode(file_get_contents('php://input'), true);
 $mode = $input['mode'] ?? 'url';
 $pageType = $input['pageType'] ?? 'article';
 
 if ($mode === 'html') {
+    // Mode HTML copié-collé
     $html = $input['html'] ?? '';
     $url = $input['url'] ?? 'HTML copié-collé';
     
@@ -27,6 +30,7 @@ if ($mode === 'html') {
     }
     
 } else {
+    // Mode URL classique
     $url = filter_var($input['url'] ?? '', FILTER_VALIDATE_URL);
     $useProxy = $input['useProxy'] ?? false;
     
@@ -36,6 +40,7 @@ if ($mode === 'html') {
         exit;
     }
     
+    // Vérifier que CURL est disponible
     if (!function_exists('curl_init')) {
         http_response_code(500);
         echo json_encode(['error' => 'Extension CURL non disponible sur le serveur']);
@@ -43,7 +48,8 @@ if ($mode === 'html') {
     }
     
     try {
-        $html = fetchHTML($url, $useProxy);
+        // Récupération du HTML
+        $html = fetchHTML($url);
         if (!$html) {
             http_response_code(500);
             echo json_encode([
@@ -64,7 +70,9 @@ if ($mode === 'html') {
 }
 
 try {
+    // Analyse de la page
     $audit = analyzeHTML($html, $url, $pageType);
+
     echo json_encode($audit, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
     
 } catch (Exception $e) {
@@ -77,235 +85,27 @@ try {
 }
 
 /**
- * Récupère le HTML d'une URL avec stratégies multiples
+ * Récupère le HTML d'une URL
  */
-function fetchHTML($url, $useProxy = false) {
-    // Stratégie 1: Mode compatible avancé (si demandé)
-    if ($useProxy) {
-        $html = fetchWithAdvancedBypass($url);
-        if ($html) return $html;
-    }
-    
-    // Stratégie 2: Headers réalistes (Chrome moderne)
+function fetchHTML($url) {
+    // Essayer d'abord avec des headers plus réalistes
     $html = fetchHTMLWithRealHeaders($url);
-    if ($html) return $html;
     
-    // Stratégie 3: cURL basique (fallback)
-    $html = fetchHTMLBasic($url);
-    if ($html) return $html;
+    // Si échec, essayer avec cURL basique
+    if (!$html) {
+        $html = fetchHTMLBasic($url);
+    }
     
-    // Stratégie 4: file_get_contents avec contexte (dernier recours)
-    $html = fetchWithFileGetContents($url);
-    if ($html) return $html;
-    
-    return false;
+    return $html;
 }
 
 /**
- * Mode contournement avancé (multiples techniques)
- */
-function fetchWithAdvancedBypass($url) {
-    $attempts = [
-        'fetchWithCloudflareBypass',
-        'fetchWithRotatingUserAgents',
-        'fetchWithDelayAndRetry',
-        'fetchWithTor' // Si disponible
-    ];
-    
-    foreach ($attempts as $method) {
-        if (function_exists($method)) {
-            $html = $method($url);
-            if ($html) {
-                error_log("Succès avec méthode: $method pour URL: $url");
-                return $html;
-            }
-        }
-    }
-    
-    return false;
-}
-
-/**
- * Contournement Cloudflare amélioré
- */
-function fetchWithCloudflareBypass($url) {
-    $ch = curl_init();
-    
-    // Headers Cloudflare-friendly
-    $headers = [
-        'Accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
-        'Accept-Language: fr-FR,fr;q=0.9,en-US;q=0.8,en;q=0.7',
-        'Accept-Encoding: gzip, deflate, br',
-        'Cache-Control: max-age=0',
-        'Connection: keep-alive',
-        'Upgrade-Insecure-Requests: 1',
-        'Sec-Fetch-Dest: document',
-        'Sec-Fetch-Mode: navigate',
-        'Sec-Fetch-Site: none',
-        'Sec-Fetch-User: ?1',
-        'sec-ch-ua: "Google Chrome";v="131", "Chromium";v="131", "Not_A Brand";v="24"',
-        'sec-ch-ua-mobile: ?0',
-        'sec-ch-ua-platform: "Windows"',
-        'DNT: 1',
-        'Sec-GPC: 1'
-    ];
-    
-    // Extraction du domaine pour le referer
-    $parsedUrl = parse_url($url);
-    $baseUrl = $parsedUrl['scheme'] . '://' . $parsedUrl['host'];
-    
-    curl_setopt_array($ch, [
-        CURLOPT_URL => $url,
-        CURLOPT_RETURNTRANSFER => true,
-        CURLOPT_FOLLOWLOCATION => true,
-        CURLOPT_MAXREDIRS => 10,
-        CURLOPT_TIMEOUT => 60,
-        CURLOPT_CONNECTTIMEOUT => 20,
-        CURLOPT_SSL_VERIFYPEER => false,
-        CURLOPT_SSL_VERIFYHOST => false,
-        CURLOPT_USERAGENT => 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
-        CURLOPT_HTTPHEADER => $headers,
-        CURLOPT_ENCODING => '',
-        CURLOPT_HTTP_VERSION => CURL_HTTP_VERSION_2_0,
-        CURLOPT_COOKIEJAR => '/tmp/cookies_' . md5($url) . '.txt',
-        CURLOPT_COOKIEFILE => '/tmp/cookies_' . md5($url) . '.txt',
-        CURLOPT_REFERER => $baseUrl,
-        CURLOPT_AUTOREFERER => true,
-        // Simulation de vraies connexions
-        CURLOPT_TCP_FASTOPEN => true,
-        CURLOPT_TCP_NODELAY => true,
-    ]);
-    
-    // Premier appel (peut déclencher un challenge)
-    $html = curl_exec($ch);
-    $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-    
-    // Si challenge Cloudflare détecté (503, 403, ou page challenge)
-    if ($httpCode == 503 || $httpCode == 403 || strpos($html, 'cloudflare') !== false) {
-        error_log("Challenge Cloudflare détecté, attente de 5 secondes...");
-        sleep(5); // Attendre le challenge
-        
-        // Deuxième tentative
-        $html = curl_exec($ch);
-        $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-    }
-    
-    $error = curl_error($ch);
-    curl_close($ch);
-    
-    // Nettoyer le fichier de cookies
-    @unlink('/tmp/cookies_' . md5($url) . '.txt');
-    
-    if ($httpCode >= 200 && $httpCode < 400 && strlen($html) > 500) {
-        return $html;
-    }
-    
-    if ($error) {
-        error_log("CURL Cloudflare Bypass Error: $error pour URL: $url");
-    }
-    
-    return false;
-}
-
-/**
- * Rotation de User-Agents (évite détection de bot)
- */
-function fetchWithRotatingUserAgents($url) {
-    $userAgents = [
-        // Chrome Windows
-        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
-        // Firefox Windows
-        'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:122.0) Gecko/20100101 Firefox/122.0',
-        // Safari macOS
-        'Mozilla/5.0 (Macintosh; Intel Mac OS X 14_2) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.2 Safari/605.1.15',
-        // Edge Windows
-        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36 Edg/131.0.0.0',
-        // Chrome macOS
-        'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36'
-    ];
-    
-    // Choisir un User-Agent aléatoire
-    $randomUA = $userAgents[array_rand($userAgents)];
-    
-    $ch = curl_init();
-    
-    curl_setopt_array($ch, [
-        CURLOPT_URL => $url,
-        CURLOPT_RETURNTRANSFER => true,
-        CURLOPT_FOLLOWLOCATION => true,
-        CURLOPT_MAXREDIRS => 10,
-        CURLOPT_TIMEOUT => 45,
-        CURLOPT_CONNECTTIMEOUT => 15,
-        CURLOPT_SSL_VERIFYPEER => false,
-        CURLOPT_SSL_VERIFYHOST => false,
-        CURLOPT_USERAGENT => $randomUA,
-        CURLOPT_HTTPHEADER => [
-            'Accept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-            'Accept-Language: fr-FR,fr;q=0.9,en;q=0.8',
-            'Accept-Encoding: gzip, deflate',
-            'Connection: keep-alive',
-            'Upgrade-Insecure-Requests: 1'
-        ],
-        CURLOPT_ENCODING => '',
-        CURLOPT_COOKIEJAR => '',
-    ]);
-    
-    $html = curl_exec($ch);
-    $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-    curl_close($ch);
-    
-    if ($httpCode >= 200 && $httpCode < 400 && strlen($html) > 500) {
-        return $html;
-    }
-    
-    return false;
-}
-
-/**
- * Retry avec délai progressif (évite rate limiting)
- */
-function fetchWithDelayAndRetry($url, $maxAttempts = 3) {
-    for ($attempt = 1; $attempt <= $maxAttempts; $attempt++) {
-        $ch = curl_init();
-        
-        curl_setopt_array($ch, [
-            CURLOPT_URL => $url,
-            CURLOPT_RETURNTRANSFER => true,
-            CURLOPT_FOLLOWLOCATION => true,
-            CURLOPT_MAXREDIRS => 10,
-            CURLOPT_TIMEOUT => 60,
-            CURLOPT_CONNECTTIMEOUT => 20,
-            CURLOPT_SSL_VERIFYPEER => false,
-            CURLOPT_SSL_VERIFYHOST => false,
-            CURLOPT_USERAGENT => 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
-            CURLOPT_ENCODING => '',
-        ]);
-        
-        $html = curl_exec($ch);
-        $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-        curl_close($ch);
-        
-        if ($httpCode >= 200 && $httpCode < 400 && strlen($html) > 500) {
-            error_log("Succès à la tentative $attempt pour URL: $url");
-            return $html;
-        }
-        
-        if ($attempt < $maxAttempts) {
-            $delay = $attempt * 2; // 2s, 4s, 6s...
-            error_log("Tentative $attempt échouée, attente de {$delay}s avant retry...");
-            sleep($delay);
-        }
-    }
-    
-    return false;
-}
-
-/**
- * Fetch avec headers réalistes (navigateur Chrome)
+ * Fetch avec headers réalistes (simule un vrai navigateur)
  */
 function fetchHTMLWithRealHeaders($url) {
     $ch = curl_init();
     
+    // Headers d'un navigateur Chrome réel
     $headers = [
         'Accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
         'Accept-Language: fr-FR,fr;q=0.9,en-US;q=0.8,en;q=0.7',
@@ -317,7 +117,7 @@ function fetchHTMLWithRealHeaders($url) {
         'Sec-Fetch-Mode: navigate',
         'Sec-Fetch-Site: none',
         'Sec-Fetch-User: ?1',
-        'sec-ch-ua: "Google Chrome";v="131", "Chromium";v="131", "Not_A Brand";v="24"',
+        'sec-ch-ua: "Google Chrome";v="119", "Chromium";v="119", "Not?A_Brand";v="24"',
         'sec-ch-ua-mobile: ?0',
         'sec-ch-ua-platform: "Windows"'
     ];
@@ -331,24 +131,27 @@ function fetchHTMLWithRealHeaders($url) {
         CURLOPT_CONNECTTIMEOUT => 15,
         CURLOPT_SSL_VERIFYPEER => false,
         CURLOPT_SSL_VERIFYHOST => false,
-        CURLOPT_USERAGENT => 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
+        CURLOPT_USERAGENT => 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36',
         CURLOPT_HTTPHEADER => $headers,
-        CURLOPT_ENCODING => '',
+        CURLOPT_ENCODING => '', // Support gzip/deflate
         CURLOPT_HTTP_VERSION => CURL_HTTP_VERSION_2_0,
-        CURLOPT_COOKIEFILE => '',
-        CURLOPT_REFERER => 'https://www.google.com/',
+        CURLOPT_COOKIEFILE => '', // Activer les cookies
+        CURLOPT_REFERER => 'https://www.google.com/', // Simuler un accès depuis Google
     ]);
     
     $html = curl_exec($ch);
     $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
     $error = curl_error($ch);
+    $errorNo = curl_errno($ch);
     curl_close($ch);
     
-    if ($error) {
-        error_log("CURL Error Real Headers: $error pour URL: $url");
+    // Log des erreurs CURL
+    if ($errorNo) {
+        error_log("CURL Error Real Headers ($errorNo): $error pour URL: $url");
         return false;
     }
     
+    // Accepter les codes 2xx et 3xx
     if ($httpCode >= 200 && $httpCode < 400) {
         return $html;
     }
@@ -379,54 +182,21 @@ function fetchHTMLBasic($url) {
     $html = curl_exec($ch);
     $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
     $error = curl_error($ch);
+    $errorNo = curl_errno($ch);
     curl_close($ch);
     
-    if ($error) {
-        error_log("CURL Error Basic: $error pour URL: $url");
+    if ($errorNo) {
+        error_log("CURL Error Basic ($errorNo): $error pour URL: $url");
         return false;
     }
     
-    if ($httpCode === 200) {
-        return $html;
+    if ($httpCode !== 200) {
+        error_log("HTTP Code $httpCode Basic pour URL: $url");
+        return false;
     }
     
-    error_log("HTTP Code $httpCode Basic pour URL: $url");
-    return false;
+    return $html;
 }
-
-/**
- * file_get_contents avec contexte (dernier recours)
- */
-function fetchWithFileGetContents($url) {
-    $context = stream_context_create([
-        'http' => [
-            'method' => 'GET',
-            'header' => "User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36\r\n" .
-                       "Accept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8\r\n" .
-                       "Accept-Language: fr-FR,fr;q=0.9\r\n",
-            'timeout' => 30,
-            'follow_location' => true,
-            'max_redirects' => 5,
-            'ignore_errors' => true
-        ],
-        'ssl' => [
-            'verify_peer' => false,
-            'verify_peer_name' => false
-        ]
-    ]);
-    
-    $html = @file_get_contents($url, false, $context);
-    
-    if ($html && strlen($html) > 500) {
-        error_log("Succès avec file_get_contents pour URL: $url");
-        return $html;
-    }
-    
-    return false;
-}
-
-// Les fonctions analyzeHTML, analyzeEntities, etc. restent identiques
-// (Copier tout le reste du fichier audit.php original ici)
 
 /**
  * Analyse complète du HTML
@@ -449,6 +219,7 @@ function analyzeHTML($html, $url, $pageType) {
         'breakdown' => []
     ];
     
+    // Calcul du score global
     $audit['breakdown'] = calculateBreakdown($audit, $pageType);
     $audit['score'] = floorTo2Decimals(array_sum($audit['breakdown']));
     $audit['recommendations'] = generateRecommendations($audit);
@@ -456,6 +227,9 @@ function analyzeHTML($html, $url, $pageType) {
     return $audit;
 }
 
+/**
+ * Extraction des scripts JSON-LD
+ */
 function extractJSONLD($html) {
     $scripts = [];
     
@@ -486,6 +260,9 @@ function extractJSONLD($html) {
     return $scripts;
 }
 
+/**
+ * Analyse des entités Schema.org
+ */
 function analyzeEntities($html, $xpath) {
     $entities = [
         'organization' => 0,
@@ -496,6 +273,7 @@ function analyzeEntities($html, $xpath) {
         'details' => []
     ];
     
+    // Extraction JSON-LD
     preg_match_all('/<script[^>]*type=["\']application\/ld\+json["\'][^>]*>(.*?)<\/script>/is', 
                    $html, $jsonldMatches);
     
@@ -503,6 +281,7 @@ function analyzeEntities($html, $xpath) {
         $data = json_decode($jsonld, true);
         if (!$data) continue;
         
+        // Support @graph
         $items = [];
         if (isset($data['@graph'])) {
             $items = $data['@graph'];
@@ -566,6 +345,7 @@ function analyzeEntities($html, $xpath) {
         }
     }
     
+    // Microdata (itemscope/itemtype)
     $microdataItems = $xpath->query('//*[@itemscope]');
     foreach ($microdataItems as $item) {
         $itemtype = $item->getAttribute('itemtype');
@@ -579,11 +359,21 @@ function analyzeEntities($html, $xpath) {
     return $entities;
 }
 
+/**
+ * Analyse des médias
+ */
 function analyzeMedia($xpath) {
+    // Images
     $images = $xpath->query('//img');
     $imagesWithAlt = $xpath->query('//img[@alt]');
+    
+    // Vidéos
     $videos = $xpath->query('//video | //iframe[contains(@src, "youtube") or contains(@src, "vimeo")]');
+    
+    // Audio
     $audios = $xpath->query('//audio');
+    
+    // Figures GEO
     $geoImages = $xpath->query('//*[contains(@class, "geo-image")]');
     $geoVideos = $xpath->query('//*[contains(@class, "geo-video")]');
     $geoAudios = $xpath->query('//*[contains(@class, "geo-audio")]');
@@ -602,7 +392,11 @@ function analyzeMedia($xpath) {
     ];
 }
 
+/**
+ * Analyse du contenu structuré
+ */
 function analyzeContent($html, $xpath) {
+    // FAQ
     $faqDetails = [];
     $faqElements = $xpath->query('//details[summary]');
     
@@ -627,12 +421,13 @@ function analyzeContent($html, $xpath) {
         }
     }
     
+    // Vérifier si FAQ Schema.org
     $faqJSONLD = preg_match('/"@type"\s*:\s*"FAQPage"/', $html);
     if ($faqJSONLD) {
         preg_match_all('/"name"\s*:\s*"([^"]+)".*?"text"\s*:\s*"([^"]+)"/s', $html, $faqSchemaMatches);
         
         if (!empty($faqSchemaMatches[1])) {
-            $faqDetails = [];
+            $faqDetails = []; // Remplacer par les FAQ Schema.org
             for ($i = 0; $i < count($faqSchemaMatches[1]); $i++) {
                 $faqDetails[] = [
                     'question' => $faqSchemaMatches[1][$i],
@@ -643,6 +438,7 @@ function analyzeContent($html, $xpath) {
         }
     }
     
+    // Citations
     $quotesDetails = [];
     $blockquotes = $xpath->query('//blockquote');
     
@@ -650,6 +446,7 @@ function analyzeContent($html, $xpath) {
         $text = trim($quote->textContent);
         $cite = $quote->getAttribute('cite');
         
+        // Chercher author
         $citeElement = $xpath->query('.//cite', $quote)->item(0);
         $author = $citeElement ? trim($citeElement->textContent) : '';
         
@@ -658,7 +455,7 @@ function analyzeContent($html, $xpath) {
                 'text' => $text,
                 'cite' => $cite,
                 'author' => $author,
-                'hasSchema' => false
+                'hasSchema' => false // Pourrait être amélioré pour détecter Schema.org Quotation
             ];
         }
     }
@@ -666,6 +463,7 @@ function analyzeContent($html, $xpath) {
     $blockquotesCount = $blockquotes->length;
     $cites = $xpath->query('//cite');
     
+    // Schema.org
     $hasSchemaOrg = $xpath->query('//*[@itemscope or @itemtype]')->length > 0;
     $hasJSONLD = preg_match('/<script[^>]*type=["\']application\/ld\+json["\']/', $html);
     
@@ -681,6 +479,9 @@ function analyzeContent($html, $xpath) {
     ];
 }
 
+/**
+ * Analyse des métadonnées
+ */
 function analyzeMetadata($xpath) {
     $title = $xpath->query('//title')->item(0);
     $titleText = $title ? trim($title->textContent) : '';
@@ -705,10 +506,16 @@ function analyzeMetadata($xpath) {
     ];
 }
 
+/**
+ * Arrondit un nombre à 2 décimales vers le bas
+ */
 function floorTo2Decimals($number) {
     return floor($number * 100) / 100;
 }
 
+/**
+ * Calcul de la répartition du score
+ */
 function calculateBreakdown($audit, $pageType) {
     $breakdown = [
         'entities' => 0,
@@ -717,6 +524,7 @@ function calculateBreakdown($audit, $pageType) {
         'metadata' => 0
     ];
     
+    // ENTITÉS (max 30 points)
     $totalEntities = $audit['entities']['organization'] + 
                      $audit['entities']['person'] + 
                      $audit['entities']['service'] + 
@@ -728,6 +536,7 @@ function calculateBreakdown($audit, $pageType) {
     
     $breakdown['entities'] = floorTo2Decimals(min(30, $breakdown['entities']));
     
+    // MÉDIAS (max 25 points)
     if ($audit['media']['images'] > 0) {
         $altRatio = $audit['media']['imagesWithAlt'] / $audit['media']['images'];
         $breakdown['media'] += 10 * $altRatio;
@@ -737,6 +546,7 @@ function calculateBreakdown($audit, $pageType) {
     
     $breakdown['media'] = floorTo2Decimals(min(25, $breakdown['media']));
     
+    // STRUCTURE (max 25 points)
     if ($audit['content']['faq'] >= 2) $breakdown['structure'] += 10;
     if ($audit['content']['hasFAQSchema']) $breakdown['structure'] += 5;
     if ($audit['content']['blockquotes'] > 0) $breakdown['structure'] += 5;
@@ -744,6 +554,7 @@ function calculateBreakdown($audit, $pageType) {
     
     $breakdown['structure'] = floorTo2Decimals(min(25, $breakdown['structure']));
     
+    // MÉTADONNÉES (max 20 points)
     if ($audit['metadata']['hasTitle']) $breakdown['metadata'] += 5;
     if ($audit['metadata']['hasDescription']) $breakdown['metadata'] += 5;
     if ($audit['metadata']['hasOG']) $breakdown['metadata'] += 5;
@@ -754,6 +565,9 @@ function calculateBreakdown($audit, $pageType) {
     return $breakdown;
 }
 
+/**
+ * Génération des recommandations
+ */
 function generateRecommendations($audit) {
     $recommendations = [];
     

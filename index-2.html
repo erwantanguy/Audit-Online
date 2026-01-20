@@ -786,7 +786,7 @@
             
             try {
                 // Appel au backend PHP
-                const response = await fetch('audit.php', {
+                const response = await fetch('audit-2.php', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json'
@@ -810,7 +810,7 @@
                 let errorMessage = 'Une erreur est survenue lors de l\'analyse.';
                 
                 if (error.message.includes('Failed to fetch')) {
-                    errorMessage = 'Impossible de contacter le serveur. Vérifiez que audit.php est accessible.';
+                    errorMessage = 'Impossible de contacter le serveur. Vérifiez que audit-2.php est accessible.';
                 } else if (error.message.includes('Impossible de récupérer')) {
                     errorMessage = 'La page cible ne répond pas ou bloque les requêtes. Vérifiez l\'URL.';
                 } else if (error.message.includes('CURL')) {
@@ -826,7 +826,7 @@
 
         function performAudit(url, pageType) {
             // SIMULATION - En production, ceci serait fait côté serveur
-            // Dans la version réelle, on ferait : fetch('audit.php', {method: 'POST', body: {url, pageType}})
+            // Dans la version réelle, on ferait : fetch('audit-2.php', {method: 'POST', body: {url, pageType}})
             
             return {
                 url: url,
