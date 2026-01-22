@@ -1005,19 +1005,28 @@ function analyzeEntities($html, $xpath) {
     preg_match_all('/<script[^>]*type=["\']application\/ld\+json["\'][^>]*>(.*?)<\/script>/is', 
                    $html, $jsonldMatches);
     
-    foreach ($jsonldMatches[1] as $jsonld) {
+    error_log("analyzeEntities: Trouvé " . count($jsonldMatches[1]) . " script(s) JSON-LD");
+    
+    foreach ($jsonldMatches[1] as $idx => $jsonld) {
         $data = json_decode($jsonld, true);
-        if (!$data) continue;
+        if (!$data) {
+            error_log("analyzeEntities: Script #$idx - JSON invalide, erreur: " . json_last_error_msg());
+            error_log("analyzeEntities: Contenu (500 premiers chars): " . substr($jsonld, 0, 500));
+            continue;
+        }
         
         $items = [];
         if (isset($data['@graph'])) {
             $items = $data['@graph'];
+            error_log("analyzeEntities: Script #$idx - @graph avec " . count($items) . " items");
         } else {
             $items = [$data];
+            error_log("analyzeEntities: Script #$idx - Entité simple de type: " . ($data['@type'] ?? 'inconnu'));
         }
         
         foreach ($items as $item) {
             $type = $item['@type'] ?? '';
+            error_log("analyzeEntities: Traitement entité de type: '$type'");
             
             switch ($type) {
                 case 'Organization':
