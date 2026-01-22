@@ -982,26 +982,67 @@
             // Entités détaillées
             let entitiesHTML = '';
             if (data.entities.details && data.entities.details.length > 0) {
-                entitiesHTML = '<table class="detail-table"><thead><tr><th>Type</th><th>Nom</th><th>Détails</th><th>Format</th></tr></thead><tbody>';
-                
                 data.entities.details.forEach(entity => {
-                    const details = [];
-                    if (entity.url) details.push(`URL: ${entity.url}`);
-                    if (entity.jobTitle) details.push(`Fonction: ${entity.jobTitle}`);
-                    if (entity.worksFor) details.push(`WorksFor: ${entity.worksFor}`);
-                    if (entity.logo) details.push('Logo présent');
+                    let detailsHTML = '';
+                    
+                    if (entity.description) {
+                        detailsHTML += `<p style="margin: 5px 0; font-style: italic; color: #555;">"${entity.description}"</p>`;
+                    }
+                    
+                    const infoItems = [];
+                    
+                    if (entity.type === 'Organization') {
+                        if (entity.alternateName) infoItems.push(`<strong>Alias:</strong> ${entity.alternateName}`);
+                        if (entity.address) infoItems.push(`<strong>Adresse:</strong> ${entity.address}`);
+                        if (entity.email) infoItems.push(`<strong>Email:</strong> ${entity.email}`);
+                        if (entity.telephone) infoItems.push(`<strong>Tél:</strong> ${entity.telephone}`);
+                        if (entity.logo) infoItems.push(`<span class="badge badge-success">Logo</span>`);
+                    }
+                    
+                    if (entity.type === 'Person') {
+                        if (entity.jobTitle) infoItems.push(`<strong>Fonction:</strong> ${entity.jobTitle}`);
+                        if (entity.worksFor) infoItems.push(`<strong>Employeur:</strong> ${entity.worksFor}`);
+                        if (entity.email) infoItems.push(`<strong>Email:</strong> ${entity.email}`);
+                        if (entity.telephone) infoItems.push(`<strong>Tél:</strong> ${entity.telephone}`);
+                        if (entity.sameAs && entity.sameAs.length > 0) infoItems.push(`<span class="badge badge-info">${entity.sameAs.length} profils sociaux</span>`);
+                    }
+                    
+                    if (entity.type === 'Service') {
+                        if (entity.provider) infoItems.push(`<strong>Fournisseur:</strong> ${entity.provider}`);
+                        if (entity.serviceType) infoItems.push(`<strong>Type:</strong> ${entity.serviceType}`);
+                        if (entity.areaServed) infoItems.push(`<strong>Zone:</strong> ${entity.areaServed}`);
+                        if (entity.offers && entity.offers.length > 0) infoItems.push(`<span class="badge badge-warning">${entity.offers.length} offre(s)</span>`);
+                    }
+                    
+                    if (entity.type === 'Product') {
+                        if (entity.brand) infoItems.push(`<strong>Marque:</strong> ${entity.brand}`);
+                        if (entity.sku) infoItems.push(`<strong>SKU:</strong> ${entity.sku}`);
+                        if (entity.offers && entity.offers.length > 0) infoItems.push(`<strong>Prix:</strong> ${entity.offers.join(', ')}`);
+                    }
+                    
+                    if (entity.type === 'LocalBusiness') {
+                        if (entity.address) infoItems.push(`<strong>Adresse:</strong> ${entity.address}`);
+                        if (entity.telephone) infoItems.push(`<strong>Tél:</strong> ${entity.telephone}`);
+                        if (entity.priceRange) infoItems.push(`<strong>Prix:</strong> ${entity.priceRange}`);
+                        if (entity.openingHours) infoItems.push(`<strong>Horaires:</strong> ${entity.openingHours}`);
+                    }
+                    
+                    if (entity.url) infoItems.push(`<a href="${entity.url}" target="_blank" style="color: #667eea;">Voir</a>`);
                     
                     entitiesHTML += `
-                        <tr>
-                            <td><span class="badge badge-info">${entity.type}</span></td>
-                            <td><strong>${entity.name}</strong></td>
-                            <td>${details.join(', ') || 'Aucun détail'}</td>
-                            <td><span class="badge ${entity.hasJSONLD ? 'badge-success' : 'badge-warning'}">${entity.hasJSONLD ? 'JSON-LD' : 'Microdata'}</span></td>
-                        </tr>
+                        <div class="entity-item">
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                                <h4 style="margin: 0;">
+                                    <span class="badge badge-info">${entity.type}</span>
+                                    ${entity.name}
+                                </h4>
+                                <span class="badge ${entity.hasJSONLD ? 'badge-success' : 'badge-warning'}">${entity.hasJSONLD ? 'JSON-LD' : 'Microdata'}</span>
+                            </div>
+                            ${detailsHTML}
+                            <p style="margin: 5px 0; font-size: 13px;">${infoItems.join(' | ') || '<span style="color: #999;">Aucun détail supplémentaire</span>'}</p>
+                        </div>
                     `;
                 });
-                
-                entitiesHTML += '</tbody></table>';
             } else {
                 entitiesHTML = '<p style="color: #666; padding: 20px; text-align: center;">Aucune entité Schema.org détectée</p>';
             }
@@ -1227,14 +1268,51 @@
             
             if (auditData.entities.details && auditData.entities.details.length > 0) {
                 csv.push(['']);
-                csv.push(['--- Détail des entités ---', '', '', '', '']);
-                csv.push(['Type', 'Nom', 'Format', 'URL/Détails', '']);
+                csv.push(['--- Détail des entités ---', '', '', '', '', '']);
+                csv.push(['Type', 'Nom', 'Description', 'Détails', 'Format', '']);
                 auditData.entities.details.forEach(entity => {
+                    let details = '';
+                    if (entity.type === 'Organization') {
+                        const parts = [];
+                        if (entity.alternateName) parts.push('Alias: ' + entity.alternateName);
+                        if (entity.address) parts.push('Adresse: ' + entity.address);
+                        if (entity.email) parts.push('Email: ' + entity.email);
+                        if (entity.telephone) parts.push('Tél: ' + entity.telephone);
+                        details = parts.join(' | ');
+                    } else if (entity.type === 'Person') {
+                        const parts = [];
+                        if (entity.jobTitle) parts.push('Fonction: ' + entity.jobTitle);
+                        if (entity.worksFor) parts.push('Employeur: ' + entity.worksFor);
+                        if (entity.email) parts.push('Email: ' + entity.email);
+                        if (entity.telephone) parts.push('Tél: ' + entity.telephone);
+                        if (entity.sameAs && entity.sameAs.length) parts.push(entity.sameAs.length + ' profils sociaux');
+                        details = parts.join(' | ');
+                    } else if (entity.type === 'Service') {
+                        const parts = [];
+                        if (entity.provider) parts.push('Fournisseur: ' + entity.provider);
+                        if (entity.serviceType) parts.push('Type: ' + entity.serviceType);
+                        if (entity.areaServed) parts.push('Zone: ' + entity.areaServed);
+                        if (entity.offers && entity.offers.length) parts.push(entity.offers.length + ' offre(s)');
+                        details = parts.join(' | ');
+                    } else if (entity.type === 'Product') {
+                        const parts = [];
+                        if (entity.brand) parts.push('Marque: ' + entity.brand);
+                        if (entity.sku) parts.push('SKU: ' + entity.sku);
+                        if (entity.offers && entity.offers.length) parts.push('Prix: ' + entity.offers.join(', '));
+                        details = parts.join(' | ');
+                    } else if (entity.type === 'LocalBusiness') {
+                        const parts = [];
+                        if (entity.address) parts.push('Adresse: ' + entity.address);
+                        if (entity.telephone) parts.push('Tél: ' + entity.telephone);
+                        if (entity.priceRange) parts.push('Prix: ' + entity.priceRange);
+                        details = parts.join(' | ');
+                    }
                     csv.push([
                         entity.type,
                         escapeCSV(entity.name),
-                        entity.hasJSONLD ? 'JSON-LD' : 'Microdata',
-                        escapeCSV(entity.url || entity.jobTitle || '')
+                        escapeCSV((entity.description || '').substring(0, 100)),
+                        escapeCSV(details || entity.url || ''),
+                        entity.hasJSONLD ? 'JSON-LD' : 'Microdata'
                     ]);
                 });
             }

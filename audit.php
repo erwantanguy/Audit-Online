@@ -1022,49 +1022,179 @@ function analyzeEntities($html, $xpath) {
             switch ($type) {
                 case 'Organization':
                     $entities['organization']++;
+                    $address = '';
+                    if (isset($item['address'])) {
+                        if (is_string($item['address'])) {
+                            $address = $item['address'];
+                        } elseif (is_array($item['address'])) {
+                            $parts = [];
+                            if (!empty($item['address']['streetAddress'])) $parts[] = $item['address']['streetAddress'];
+                            if (!empty($item['address']['postalCode'])) $parts[] = $item['address']['postalCode'];
+                            if (!empty($item['address']['addressLocality'])) $parts[] = $item['address']['addressLocality'];
+                            if (!empty($item['address']['addressCountry'])) $parts[] = $item['address']['addressCountry'];
+                            $address = implode(', ', $parts);
+                        }
+                    }
                     $entities['details'][] = [
                         'type' => 'Organization',
                         'name' => $item['name'] ?? 'Sans nom',
+                        'description' => $item['description'] ?? '',
                         'url' => $item['url'] ?? '',
-                        'logo' => $item['logo'] ?? '',
+                        'logo' => is_string($item['logo'] ?? '') ? ($item['logo'] ?? '') : ($item['logo']['url'] ?? ''),
+                        'image' => is_string($item['image'] ?? '') ? ($item['image'] ?? '') : ($item['image']['url'] ?? ''),
+                        'alternateName' => is_array($item['alternateName'] ?? null) ? implode(', ', $item['alternateName']) : ($item['alternateName'] ?? ''),
+                        'address' => $address,
+                        'email' => $item['email'] ?? '',
+                        'telephone' => $item['telephone'] ?? '',
+                        'sameAs' => is_array($item['sameAs'] ?? null) ? $item['sameAs'] : [],
                         'hasJSONLD' => true
                     ];
                     break;
                     
                 case 'Person':
                     $entities['person']++;
+                    $worksForName = '';
+                    if (isset($item['worksFor'])) {
+                        if (is_string($item['worksFor'])) {
+                            $worksForName = $item['worksFor'];
+                        } elseif (isset($item['worksFor']['name'])) {
+                            $worksForName = $item['worksFor']['name'];
+                        } elseif (isset($item['worksFor']['@id'])) {
+                            $worksForName = 'Référence: ' . $item['worksFor']['@id'];
+                        }
+                    }
                     $entities['details'][] = [
                         'type' => 'Person',
                         'name' => $item['name'] ?? 'Sans nom',
+                        'description' => $item['description'] ?? '',
+                        'url' => $item['url'] ?? '',
+                        'image' => is_string($item['image'] ?? '') ? ($item['image'] ?? '') : ($item['image']['url'] ?? ''),
                         'jobTitle' => $item['jobTitle'] ?? '',
-                        'worksFor' => isset($item['worksFor']) ? 'Oui' : 'Non',
+                        'email' => $item['email'] ?? '',
+                        'telephone' => $item['telephone'] ?? '',
+                        'worksFor' => $worksForName,
+                        'memberOf' => isset($item['memberOf']) ? 'Oui' : 'Non',
+                        'sameAs' => is_array($item['sameAs'] ?? null) ? $item['sameAs'] : [],
                         'hasJSONLD' => true
                     ];
                     break;
                     
                 case 'Service':
                     $entities['service']++;
+                    $providerName = '';
+                    if (isset($item['provider'])) {
+                        if (is_string($item['provider'])) {
+                            $providerName = $item['provider'];
+                        } elseif (isset($item['provider']['name'])) {
+                            $providerName = $item['provider']['name'];
+                        } elseif (isset($item['provider']['@id'])) {
+                            $providerName = 'Référence: ' . $item['provider']['@id'];
+                        }
+                    }
+                    $areaServed = '';
+                    if (isset($item['areaServed'])) {
+                        if (is_string($item['areaServed'])) {
+                            $areaServed = $item['areaServed'];
+                        } elseif (is_array($item['areaServed'])) {
+                            if (isset($item['areaServed']['name'])) {
+                                $areaServed = $item['areaServed']['name'];
+                            } else {
+                                $areas = array_map(function($a) {
+                                    return is_string($a) ? $a : ($a['name'] ?? '');
+                                }, $item['areaServed']);
+                                $areaServed = implode(', ', array_filter($areas));
+                            }
+                        }
+                    }
+                    $offers = [];
+                    if (isset($item['offers'])) {
+                        $offersList = isset($item['offers'][0]) ? $item['offers'] : [$item['offers']];
+                        foreach ($offersList as $offer) {
+                            $offerInfo = [];
+                            if (!empty($offer['name'])) $offerInfo[] = $offer['name'];
+                            if (!empty($offer['price'])) {
+                                $price = $offer['price'];
+                                if (!empty($offer['priceCurrency'])) $price .= ' ' . $offer['priceCurrency'];
+                                $offerInfo[] = $price;
+                            }
+                            if (!empty($offerInfo)) $offers[] = implode(' - ', $offerInfo);
+                        }
+                    }
                     $entities['details'][] = [
                         'type' => 'Service',
                         'name' => $item['name'] ?? 'Sans nom',
+                        'description' => $item['description'] ?? '',
+                        'url' => $item['url'] ?? '',
+                        'image' => is_string($item['image'] ?? '') ? ($item['image'] ?? '') : ($item['image']['url'] ?? ''),
+                        'provider' => $providerName,
+                        'serviceType' => $item['serviceType'] ?? '',
+                        'areaServed' => $areaServed,
+                        'offers' => $offers,
                         'hasJSONLD' => true
                     ];
                     break;
                     
                 case 'Product':
                     $entities['product']++;
+                    $brand = '';
+                    if (isset($item['brand'])) {
+                        $brand = is_string($item['brand']) ? $item['brand'] : ($item['brand']['name'] ?? '');
+                    }
+                    $offers = [];
+                    if (isset($item['offers'])) {
+                        $offersList = isset($item['offers'][0]) ? $item['offers'] : [$item['offers']];
+                        foreach ($offersList as $offer) {
+                            $offerInfo = [];
+                            if (!empty($offer['price'])) {
+                                $price = $offer['price'];
+                                if (!empty($offer['priceCurrency'])) $price .= ' ' . $offer['priceCurrency'];
+                                $offerInfo[] = $price;
+                            }
+                            if (!empty($offer['availability'])) {
+                                $avail = str_replace('https://schema.org/', '', $offer['availability']);
+                                $offerInfo[] = $avail;
+                            }
+                            if (!empty($offerInfo)) $offers[] = implode(' - ', $offerInfo);
+                        }
+                    }
                     $entities['details'][] = [
                         'type' => 'Product',
                         'name' => $item['name'] ?? 'Sans nom',
+                        'description' => $item['description'] ?? '',
+                        'url' => $item['url'] ?? '',
+                        'image' => is_string($item['image'] ?? '') ? ($item['image'] ?? '') : ($item['image']['url'] ?? ''),
+                        'brand' => $brand,
+                        'sku' => $item['sku'] ?? '',
+                        'offers' => $offers,
                         'hasJSONLD' => true
                     ];
                     break;
                     
                 case 'LocalBusiness':
                     $entities['localBusiness']++;
+                    $address = '';
+                    if (isset($item['address'])) {
+                        if (is_string($item['address'])) {
+                            $address = $item['address'];
+                        } elseif (is_array($item['address'])) {
+                            $parts = [];
+                            if (!empty($item['address']['streetAddress'])) $parts[] = $item['address']['streetAddress'];
+                            if (!empty($item['address']['postalCode'])) $parts[] = $item['address']['postalCode'];
+                            if (!empty($item['address']['addressLocality'])) $parts[] = $item['address']['addressLocality'];
+                            $address = implode(', ', $parts);
+                        }
+                    }
                     $entities['details'][] = [
                         'type' => 'LocalBusiness',
                         'name' => $item['name'] ?? 'Sans nom',
+                        'description' => $item['description'] ?? '',
+                        'url' => $item['url'] ?? '',
+                        'image' => is_string($item['image'] ?? '') ? ($item['image'] ?? '') : ($item['image']['url'] ?? ''),
+                        'address' => $address,
+                        'telephone' => $item['telephone'] ?? '',
+                        'email' => $item['email'] ?? '',
+                        'priceRange' => $item['priceRange'] ?? '',
+                        'openingHours' => is_array($item['openingHours'] ?? null) ? implode(', ', $item['openingHours']) : ($item['openingHours'] ?? ''),
                         'hasJSONLD' => true
                     ];
                     break;

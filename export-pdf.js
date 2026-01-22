@@ -702,7 +702,7 @@ function exportPDF() {
         
         if (auditData.entities.details && auditData.entities.details.length > 0) {
             auditData.entities.details.forEach((entity, idx) => {
-                checkPageBreak(15);
+                checkPageBreak(25);
                 
                 doc.setFontSize(9);
                 doc.setFont('helvetica', 'bold');
@@ -710,18 +710,61 @@ function exportPDF() {
                 doc.text(`${entity.type}:`, margin, y);
                 doc.setTextColor(0, 0, 0);
                 doc.setFont('helvetica', 'normal');
-                doc.text(entity.name || 'Sans nom', margin + 30, y);
+                
+                const nameText = (entity.name || 'Sans nom').substring(0, 50);
+                doc.text(nameText, margin + 28, y);
                 
                 if (entity.hasJSONLD) {
                     doc.setFillColor(40, 163, 42);
-                    doc.roundedRect(margin + 120, y - 3, 20, 5, 1, 1, 'F');
+                    doc.roundedRect(margin + 130, y - 3, 20, 5, 1, 1, 'F');
                     doc.setFontSize(6);
                     doc.setTextColor(255, 255, 255);
-                    doc.text('JSON-LD', margin + 122, y);
+                    doc.text('JSON-LD', margin + 132, y);
                     doc.setTextColor(0, 0, 0);
                 }
                 
-                y += 7;
+                y += 5;
+                
+                if (entity.description) {
+                    doc.setFontSize(8);
+                    doc.setTextColor(100, 100, 100);
+                    const descShort = entity.description.length > 90 ? entity.description.substring(0, 87) + '...' : entity.description;
+                    y = addText('"' + descShort + '"', margin + 5, y, contentWidth - 10, 3.5);
+                    doc.setTextColor(0, 0, 0);
+                }
+                
+                let detailParts = [];
+                if (entity.type === 'Organization') {
+                    if (entity.alternateName) detailParts.push('Alias: ' + entity.alternateName.substring(0, 30));
+                    if (entity.address) detailParts.push('Adresse: ' + entity.address.substring(0, 30));
+                    if (entity.email) detailParts.push('Email: ' + entity.email);
+                } else if (entity.type === 'Person') {
+                    if (entity.jobTitle) detailParts.push('Fonction: ' + entity.jobTitle.substring(0, 40));
+                    if (entity.worksFor) detailParts.push('Employeur: ' + entity.worksFor.substring(0, 25));
+                    if (entity.email) detailParts.push('Email: ' + entity.email);
+                } else if (entity.type === 'Service') {
+                    if (entity.provider) detailParts.push('Fournisseur: ' + entity.provider.substring(0, 25));
+                    if (entity.serviceType) detailParts.push('Type: ' + entity.serviceType);
+                    if (entity.areaServed) detailParts.push('Zone: ' + entity.areaServed.substring(0, 20));
+                } else if (entity.type === 'Product') {
+                    if (entity.brand) detailParts.push('Marque: ' + entity.brand);
+                    if (entity.sku) detailParts.push('SKU: ' + entity.sku);
+                    if (entity.offers && entity.offers.length) detailParts.push('Prix: ' + entity.offers[0]);
+                } else if (entity.type === 'LocalBusiness') {
+                    if (entity.address) detailParts.push('Adresse: ' + entity.address.substring(0, 35));
+                    if (entity.telephone) detailParts.push('Tel: ' + entity.telephone);
+                }
+                
+                if (detailParts.length > 0) {
+                    doc.setFontSize(7);
+                    doc.setTextColor(80, 80, 80);
+                    const detailLine = detailParts.join(' | ').substring(0, 120);
+                    doc.text(detailLine, margin + 5, y);
+                    doc.setTextColor(0, 0, 0);
+                    y += 4;
+                }
+                
+                y += 3;
             });
         } else {
             doc.setFontSize(9);
