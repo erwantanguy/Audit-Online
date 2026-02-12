@@ -1283,6 +1283,24 @@ function analyzeContent($html, $xpath) {
     $faqElements = $xpath->query('//details[summary]');
     
     foreach ($faqElements as $faq) {
+        $isInCookieBanner = false;
+        $parent = $faq;
+        while ($parent !== null) {
+            if ($parent->nodeType === XML_ELEMENT_NODE) {
+                $class = $parent->getAttribute('class') ?? '';
+                $id = $parent->getAttribute('id') ?? '';
+                if (preg_match('/cmplz|cookie|consent|gdpr|rgpd|tarteaucitron|axeptio|didomi|onetrust|cookiebot/i', $class . ' ' . $id)) {
+                    $isInCookieBanner = true;
+                    break;
+                }
+            }
+            $parent = $parent->parentNode;
+        }
+        
+        if ($isInCookieBanner) {
+            continue;
+        }
+        
         $summary = $xpath->query('.//summary', $faq)->item(0);
         $question = $summary ? trim($summary->textContent) : '';
         
