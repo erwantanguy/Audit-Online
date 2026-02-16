@@ -573,6 +573,17 @@
                             <a href="https://www.scrapingbee.com/" target="_blank" style="color: #667eea;">Obtenir une clé gratuite</a>
                         </p>
                     </div>
+
+                    <div style="margin-bottom: 15px;">
+                        <label style="display: flex; align-items: center; gap: 10px; cursor: pointer;">
+                            <input type="checkbox" id="identifyAsBot" style="width: 18px; height: 18px;">
+                            <span>S'identifier comme GEO-Audit-Bot</span>
+                        </label>
+                        <p style="font-size: 12px; color: #666; margin: 5px 0 0 30px;">
+                            Utilise un User-Agent identifiable au lieu de se faire passer pour un navigateur.
+                            Recommandé pour auditer vos propres sites.
+                        </p>
+                    </div>
                 </div>
 
                 <div id="htmlTab" class="tab-content">
@@ -767,13 +778,14 @@
                 const pageType = document.getElementById('pageType').value;
                 const useProxy = document.getElementById('useProxy').checked;
                 const useScrapingService = document.getElementById('useScrapingService').checked;
+                const identifyAsBot = document.getElementById('identifyAsBot').checked;
                 
                 if (!url) {
                     alert('⚠️ Veuillez saisir une URL');
                     return;
                 }
                 
-                requestData = { url, pageType, useProxy, useScrapingService, mode: 'url' };
+                requestData = { url, pageType, useProxy, useScrapingService, identifyAsBot, mode: 'url' };
                 document.getElementById('loadingUrl').textContent = url;
                 
             } else {

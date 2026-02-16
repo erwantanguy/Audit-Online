@@ -5,6 +5,9 @@
  * + Support services de scraping tiers (ScrapingBee, ScraperAPI, Browserless)
  */
 
+define('GEO_AUDIT_VERSION', '1.2.0');
+define('GEO_AUDIT_USER_AGENT', 'GEO-Audit-Bot/' . GEO_AUDIT_VERSION . ' (+https://audit.ticoet.me; contact@ticoet.fr)');
+
 error_reporting(E_ALL);
 ini_set('display_errors', 0);
 ini_set('log_errors', 1);
@@ -33,6 +36,7 @@ if ($mode === 'html') {
     $url = filter_var($input['url'] ?? '', FILTER_VALIDATE_URL);
     $useProxy = $input['useProxy'] ?? false;
     $useScrapingService = $input['useScrapingService'] ?? false;
+    $identifyAsBot = $input['identifyAsBot'] ?? false;
     
     if (!$url) {
         http_response_code(400);
@@ -47,7 +51,7 @@ if ($mode === 'html') {
     }
     
     try {
-        $html = fetchHTML($url, $useProxy, $useScrapingService);
+        $html = fetchHTML($url, $useProxy, $useScrapingService, $identifyAsBot);
         if (!$html) {
             $hasScrapingService = !empty($SCRAPING_CONFIG['service']);
             http_response_code(500);
@@ -111,11 +115,21 @@ function loadScrapingConfig() {
 /**
  * Récupère le HTML d'une URL avec stratégies multiples
  */
-function fetchHTML($url, $useProxy = false, $useScrapingService = false) {
+function fetchHTML($url, $useProxy = false, $useScrapingService = false, $identifyAsBot = false) {
     global $SCRAPING_CONFIG;
     
-    error_log("fetchHTML: Début - URL: $url, useProxy: " . ($useProxy ? 'true' : 'false') . ", useScrapingService: " . ($useScrapingService ? 'true' : 'false'));
+    error_log("fetchHTML: Début - URL: $url, useProxy: " . ($useProxy ? 'true' : 'false') . ", useScrapingService: " . ($useScrapingService ? 'true' : 'false') . ", identifyAsBot: " . ($identifyAsBot ? 'true' : 'false'));
     error_log("fetchHTML: Config service: " . ($SCRAPING_CONFIG['service'] ?? 'non défini') . ", API key présente: " . (!empty($SCRAPING_CONFIG['api_key']) ? 'oui' : 'non'));
+    
+    // Si identification comme bot demandée, utiliser directement le User-Agent dédié
+    if ($identifyAsBot) {
+        $html = fetchHTMLAsBot($url);
+        if ($html && isValidHTML($html)) {
+            error_log("Succès avec User-Agent bot identifiable: " . GEO_AUDIT_USER_AGENT);
+            return $html;
+        }
+        error_log("fetchHTML: Échec avec User-Agent bot, tentative avec stratégies standard...");
+    }
     
     // Stratégie 0: Service de scraping tiers (si demandé et configuré)
     if ($useScrapingService && !empty($SCRAPING_CONFIG['service']) && !empty($SCRAPING_CONFIG['api_key'])) {
@@ -138,7 +152,7 @@ function fetchHTML($url, $useProxy = false, $useScrapingService = false) {
     $html = fetchHTMLWithRealHeaders($url);
     if ($html && isValidHTML($html)) return $html;
     
-    // Stratégie 3: cURL basique (fallback)
+    // Stratégie 3: cURL basique avec User-Agent bot
     $html = fetchHTMLBasic($url);
     if ($html && isValidHTML($html)) return $html;
     
@@ -853,7 +867,7 @@ function fetchHTMLBasic($url) {
         CURLOPT_CONNECTTIMEOUT => 10,
         CURLOPT_SSL_VERIFYPEER => false,
         CURLOPT_SSL_VERIFYHOST => false,
-        CURLOPT_USERAGENT => 'Mozilla/5.0 (compatible; GEO-Audit-Bot/1.0; +https://ticoet.fr)',
+        CURLOPT_USERAGENT => GEO_AUDIT_USER_AGENT,
         CURLOPT_ENCODING => '',
         CURLOPT_HTTP_VERSION => CURL_HTTP_VERSION_1_1,
     ]);
@@ -873,6 +887,52 @@ function fetchHTMLBasic($url) {
     }
     
     error_log("HTTP Code $httpCode Basic pour URL: $url");
+    return false;
+}
+
+/**
+ * Récupère le HTML avec identification explicite comme bot
+ * Utilise le User-Agent GEO-Audit-Bot pour être identifiable dans les logs serveur
+ */
+function fetchHTMLAsBot($url) {
+    $ch = curl_init();
+    curl_setopt_array($ch, [
+        CURLOPT_URL => $url,
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_FOLLOWLOCATION => true,
+        CURLOPT_MAXREDIRS => 5,
+        CURLOPT_TIMEOUT => 30,
+        CURLOPT_CONNECTTIMEOUT => 10,
+        CURLOPT_SSL_VERIFYPEER => false,
+        CURLOPT_SSL_VERIFYHOST => false,
+        CURLOPT_USERAGENT => GEO_AUDIT_USER_AGENT,
+        CURLOPT_ENCODING => '',
+        CURLOPT_HTTP_VERSION => CURL_HTTP_VERSION_1_1,
+        CURLOPT_HTTPHEADER => [
+            'Accept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+            'Accept-Language: fr-FR,fr;q=0.9,en;q=0.8',
+            'Cache-Control: no-cache',
+            'X-GEO-Audit: true',
+            'X-Bot-Purpose: SEO/GEO Analysis'
+        ],
+    ]);
+    
+    $html = curl_exec($ch);
+    $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    $error = curl_error($ch);
+    curl_close($ch);
+    
+    if ($error) {
+        error_log("CURL Error AsBot: $error pour URL: $url");
+        return false;
+    }
+    
+    if ($httpCode === 200) {
+        error_log("fetchHTMLAsBot: Succès HTTP 200 pour URL: $url");
+        return $html;
+    }
+    
+    error_log("HTTP Code $httpCode AsBot pour URL: $url");
     return false;
 }
 
