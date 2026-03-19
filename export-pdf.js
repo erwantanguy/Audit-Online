@@ -734,24 +734,28 @@ function exportPDF() {
                 }
                 
                 let detailParts = [];
+                const safeSubstring = (val, len) => {
+                    if (Array.isArray(val)) val = val.join(', ');
+                    return typeof val === 'string' ? val.substring(0, len) : String(val).substring(0, len);
+                };
                 if (entity.type === 'Organization') {
-                    if (entity.alternateName) detailParts.push('Alias: ' + entity.alternateName.substring(0, 30));
-                    if (entity.address) detailParts.push('Adresse: ' + entity.address.substring(0, 30));
+                    if (entity.alternateName) detailParts.push('Alias: ' + safeSubstring(entity.alternateName, 30));
+                    if (entity.address) detailParts.push('Adresse: ' + safeSubstring(entity.address, 30));
                     if (entity.email) detailParts.push('Email: ' + entity.email);
                 } else if (entity.type === 'Person') {
-                    if (entity.jobTitle) detailParts.push('Fonction: ' + entity.jobTitle.substring(0, 40));
-                    if (entity.worksFor) detailParts.push('Employeur: ' + entity.worksFor.substring(0, 25));
+                    if (entity.jobTitle) detailParts.push('Fonction: ' + safeSubstring(entity.jobTitle, 40));
+                    if (entity.worksFor) detailParts.push('Employeur: ' + safeSubstring(entity.worksFor, 25));
                     if (entity.email) detailParts.push('Email: ' + entity.email);
                 } else if (entity.type === 'Service') {
-                    if (entity.provider) detailParts.push('Fournisseur: ' + entity.provider.substring(0, 25));
+                    if (entity.provider) detailParts.push('Fournisseur: ' + safeSubstring(entity.provider, 25));
                     if (entity.serviceType) detailParts.push('Type: ' + entity.serviceType);
-                    if (entity.areaServed) detailParts.push('Zone: ' + entity.areaServed.substring(0, 20));
+                    if (entity.areaServed) detailParts.push('Zone: ' + safeSubstring(entity.areaServed, 20));
                 } else if (entity.type === 'Product') {
                     if (entity.brand) detailParts.push('Marque: ' + entity.brand);
                     if (entity.sku) detailParts.push('SKU: ' + entity.sku);
                     if (entity.offers && entity.offers.length) detailParts.push('Prix: ' + entity.offers[0]);
-                } else if (entity.type === 'LocalBusiness') {
-                    if (entity.address) detailParts.push('Adresse: ' + entity.address.substring(0, 35));
+                } else if (entity.type === 'LocalBusiness' || entity.type === 'ProfessionalService') {
+                    if (entity.address) detailParts.push('Adresse: ' + safeSubstring(entity.address, 35));
                     if (entity.telephone) detailParts.push('Tel: ' + entity.telephone);
                 }
                 
